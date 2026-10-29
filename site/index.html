@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="fr"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="description" content="KERNE - Plateforme d'étude collaborative P2P avec vidéo, chat et partage d'écran">
+    <meta name="description" content="KERNE - Collaborative study rooms with video, chat, whiteboards and screen sharing">
     <meta name="theme-color" content="#ffeb3b">
     <link rel="icon" type="image/png" href="Logo.png">
     <link rel="apple-touch-icon" href="Logo.png">
@@ -12,13 +12,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="KERNE">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta property="og:title" content="KERNE — Étude collaborative">
-    <meta property="og:description" content="La salle d'étude en ligne pour bosser ensemble.">
+    <meta property="og:title" content="KERNE — Study together">
+    <meta property="og:description" content="Study together in a shared online room.">
     <meta property="og:image" content="Logo.png">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:image" content="Logo.png">
-    <title>KERNE - Rejoindre une session</title>
+    <title>KERNE - Join a study room</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Oswald:wght@600;700&display=swap');
 
@@ -708,7 +708,7 @@
             font-size: 14px;
         }
 
-        /* ===== BOUTON INSTALL (MOBILE UNIQUEMENT — icône rond, haut gauche) ===== */
+        /* Install button: mobile top left */
         .install-btn {
             display: none;
         }
@@ -948,20 +948,16 @@
     <div class="about-note" id="aboutNote">
         <button class="close-note" id="closeNote">×</button>
         <div class="about-photo"><img src="Photo.png" alt="Kerne"></div>
-        <h3>À PROPOS DE KERNE</h3>
-        <p>J’ai fait ça à l’arrache en un weekend parce que j'étais trop démotivé et que j'en pouvais plus de bosser
-            seul.
-            Profitez d’une appli faite par un étudiant, pour vous, étudiants.
-            <br>
-            </p><center>Force à Nous !</center>
-            <br><i>Yassine El Faidi</i>
-        <p></p>
+        <h3>ABOUT KERNE</h3>
+        <p>I built KERNE because studying alone can be hard. Join a room, work alongside other students, and keep each other motivated.</p>
+        <center>You've got this!</center>
+        <br><i>Yassine El Faidi</i>
     </div>
 
-    <a href="https://ko-fi.com/kerne" target="_blank" class="donate-btn">💌 SOUTENIR</a>
+    <a href="https://ko-fi.com/kerne" target="_blank" class="donate-btn">💌 SUPPORT</a>
 
-    <!-- Bouton install : icône rond, mobile uniquement, haut gauche -->
-    <button class="install-btn" id="installBtn" title="Installer l'app">
+    <!-- Mobile install button -->
+    <button class="install-btn" id="installBtn" title="Install the app">
         <svg viewBox="0 0 24 24">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
@@ -969,11 +965,11 @@
         </svg>
     </button>
 
-    <!-- Modal install -->
+    <!-- Install dialog -->
     <div class="install-overlay" id="installOverlay">
         <div class="install-modal">
             <button class="install-close" id="installClose">×</button>
-            <div class="install-modal-title">📲 Installer KERNE</div>
+            <div class="install-modal-title">📲 Install KERNE</div>
             <div class="install-tabs">
                 <button class="install-tab active" id="tabIos" onclick="switchInstallTab('ios')">
                     <svg viewBox="0 0 24 24">
@@ -991,50 +987,49 @@
             <div class="install-panel active" id="panelIos">
                 <div class="install-step">
                     <div class="install-step-num">1</div>
-                    <div class="install-step-text">Ouvre ce site dans <strong>Safari</strong> (pas Chrome ni Firefox)
+                    <div class="install-step-text">Open this site in <strong>Safari</strong> (not Chrome or Firefox)
                     </div>
                 </div>
                 <div class="install-step">
                     <div class="install-step-num">2</div>
-                    <div class="install-step-text">Appuie sur le bouton <strong>Partager</strong> <svg viewBox="0 0 24 24" style="width:15px;height:15px;display:inline;vertical-align:middle;stroke:var(--ink);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;">
+                    <div class="install-step-text">Tap the <strong>Share</strong> <svg viewBox="0 0 24 24" style="width:15px;height:15px;display:inline;vertical-align:middle;stroke:var(--ink);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;">
                             <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
                             <polyline points="16 6 12 2 8 6"></polyline>
                             <line x1="12" y1="2" x2="12" y2="15"></line>
-                        </svg> en bas de l'écran</div>
+                        </svg> button at the bottom of the screen</div>
                 </div>
                 <div class="install-step">
                     <div class="install-step-num">3</div>
-                    <div class="install-step-text">Fais défiler et tape sur <strong>« Sur l'écran d'accueil »</strong>
+                    <div class="install-step-text">Scroll and tap <strong>“Add to Home Screen”</strong>
                     </div>
                 </div>
                 <div class="install-step">
                     <div class="install-step-num">4</div>
-                    <div class="install-step-text">Appuie sur <strong>Ajouter</strong> — c'est tout !</div>
+                    <div class="install-step-text">Tap <strong>Add</strong> — done!</div>
                 </div>
-                <div class="install-note">⚠️ Fonctionne uniquement via Safari sur iPhone/iPad. L'app s'ouvre ensuite en
-                    plein écran !</div>
+                <div class="install-note">⚠️ On iPhone and iPad, install through Safari. KERNE then opens full screen.</div>
             </div>
             <div class="install-panel" id="panelAndroid">
                 <div class="install-step">
                     <div class="install-step-num">1</div>
-                    <div class="install-step-text">Ouvre ce site dans <strong>Chrome</strong></div>
+                    <div class="install-step-text">Open this site in <strong>Chrome</strong></div>
                 </div>
                 <div class="install-step">
                     <div class="install-step-num">2</div>
-                    <div class="install-step-text">Appuie sur le menu <strong>⋮</strong> en haut à droite de Chrome
+                    <div class="install-step-text">Tap the <strong>⋮</strong> menu at the top right of Chrome
                     </div>
                 </div>
                 <div class="install-step">
                     <div class="install-step-num">3</div>
-                    <div class="install-step-text">Tape sur <strong>« Ajouter à l'écran d'accueil »</strong> ou
-                        <strong>« Installer »</strong>
+                    <div class="install-step-text">Tap <strong>“Add to Home screen”</strong> or
+                        <strong>“Install app”</strong>
                     </div>
                 </div>
                 <div class="install-step">
                     <div class="install-step-num">4</div>
-                    <div class="install-step-text">Confirme en appuyant sur <strong>Installer</strong></div>
+                    <div class="install-step-text">Confirm by tapping <strong>Install</strong></div>
                 </div>
-                <div class="install-note">✓ Chrome peut aussi proposer automatiquement une bannière d'installation !
+                <div class="install-note">✓ Chrome may also offer an install prompt automatically.
                 </div>
             </div>
         </div>
@@ -1043,80 +1038,80 @@
     <div class="container">
         <div class="main-card">
             <div class="logo">KERNE</div>
-            <div class="tagline">Étudions Ensemble, Restons Motivés</div>
+            <div class="tagline">Study Together, Stay Motivated</div>
             <form id="joinForm">
                 <div class="form-section">
-                    <label class="label-title">👤 TON NOM</label>
+                    <label class="label-title">👤 YOUR NAME</label>
                     <div class="input-container">
-                        <input type="text" id="nameInput" placeholder="Ex: Alex, Marie, Sam..." maxlength="20" autocomplete="off" required="">
+                        <input type="text" id="nameInput" placeholder="e.g. Alex, Marie, Sam..." maxlength="20" autocomplete="off" required="">
                         <span class="validation-icon" id="nameValidation"></span>
                     </div>
                     <div class="validation-message" id="nameMessage"></div>
                 </div>
 
                 <div class="form-section">
-                    <label class="label-title">📚 TON NIVEAU D'ÉTUDES</label>
+                    <label class="label-title">📚 YOUR STUDY LEVEL</label>
                     <select id="levelSelect" required="">
-                        <option value="">-- Sélectionne ton niveau --</option>
-                        <option value="Collège">Collège</option>
-                        <option value="Lycée">Lycée</option>
-                        <option value="Prépa">Prépa (CPGE)</option>
-                        <option value="Licence">Licence (L1, L2, L3)</option>
-                        <option value="Master">Master (M1, M2)</option>
-                        <option value="Doctorat">Doctorat</option>
+                        <option value="">-- Select your level --</option>
+                        <option value="Middle school">Middle school</option>
+                        <option value="High school">High school</option>
+                        <option value="Preparatory class">Preparatory class</option>
+                        <option value="Undergraduate">Undergraduate</option>
+                        <option value="Master's">Master's</option>
+                        <option value="Doctorate">Doctorate</option>
                     </select>
                 </div>
 
                 <div class="form-section">
-                    <label class="label-title">APERÇU CAMÉRA</label>
+                    <label class="label-title">CAMERA PREVIEW</label>
                     <div class="camera-preview">
                         <video id="localVideo" autoplay="" muted="" playsinline=""></video>
-                        <div class="camera-status" id="cameraStatus">Attente autorisation...</div>
+                        <div class="camera-status" id="cameraStatus">Waiting for camera access...</div>
                         <div class="user-info-overlay">
                             <div class="user-name-display" id="userNameDisplay">-</div>
                             <div class="user-level-display" id="userLevelDisplay">-</div>
                         </div>
                     </div>
                     <div id="cameraPermissionHelp" role="status" style="display:none; margin-top:10px; padding:12px; background:#fff8d6; border:2px solid var(--ink); font-size:13px; line-height:1.45;">
-                        <strong>Caméra désactivée.</strong> Tu peux rejoindre la salle quand même.
-                        <span id="cameraHelpText">Pour l'activer après un refus, autorise la caméra dans les réglages du site (icône à côté de l'adresse), puis appuie sur Réessayer. Sur téléphone, vérifie aussi les réglages du navigateur.</span>
-                        <button type="button" id="retryCameraBtn" style="display:block; margin-top:8px; padding:8px 12px; background:var(--highlight); border:2px solid var(--ink); font-weight:700; cursor:pointer;">Réessayer la caméra</button>
+                        <strong>Camera off.</strong> You can still join the room.
+                        <span id="cameraHelpText">If access was denied, allow the camera in your site or browser settings, then try again. On a phone, also check your browser permissions.</span>
+                        <button type="button" id="retryCameraBtn" style="display:block; margin-top:8px; padding:8px 12px; background:var(--highlight); border:2px solid var(--ink); font-weight:700; cursor:pointer;">Try camera again</button>
                     </div>
                 </div>
 
-                <button type="submit" class="join-btn" id="joinBtn" disabled="">REJOINDRE UNE SALLE PUBLIQUE</button>
+                <button type="submit" class="join-btn" id="joinBtn" disabled="">JOIN A PUBLIC ROOM</button>
 
                 <div style="margin-top: 18px; border-top: 2px dashed rgba(26,26,26,0.15); padding-top: 18px;">
-                    <!-- 1. Entrer un code -->
+                    <!-- 1. Enter a room code -->
                     <div style="display:flex; gap:8px; align-items:stretch; margin-bottom:12px;">
-                        <input type="text" id="roomCodeInput" placeholder="Code de salle" maxlength="6" pattern="[0-9]{6}" autocomplete="off" inputmode="numeric" style="text-transform:uppercase; letter-spacing:4px; font-size:18px; font-weight:700; flex:1; padding:12px 14px; border:2px solid var(--ink); background:white; font-family:'Courier Prime',monospace; text-align:center; min-width:0;">
-                        <button type="button" id="joinPrivateBtn" class="private-btn" disabled="" style="padding:12px 16px;">Rejoindre</button>
+                        <input type="text" id="roomCodeInput" placeholder="Room code" maxlength="6" pattern="[0-9]{6}" autocomplete="off" inputmode="numeric" style="text-transform:uppercase; letter-spacing:4px; font-size:18px; font-weight:700; flex:1; padding:12px 14px; border:2px solid var(--ink); background:white; font-family:'Courier Prime',monospace; text-align:center; min-width:0;">
+                        <button type="button" id="joinPrivateBtn" class="private-btn" disabled="" style="padding:12px 16px;">Join</button>
                     </div>
 
-                    <!-- 2. Code généré (affiché après création) -->
+                    <!-- 2. Generated code -->
                     <div id="generatedCodeBox" style="display:none; margin-bottom:12px;">
                         <div style="font-family:'Oswald',sans-serif; font-size:11px; text-transform:uppercase; letter-spacing:1px; opacity:0.6; margin-bottom:5px; text-align:center;">
-                            Code créé — partage-le à tes amis</div>
+                            Room code — share it with friends</div>
                         <div style="display:flex; gap:8px; align-items:center;">
                             <div id="generatedCodeDisplay" style="font-family:'Courier Prime',monospace; font-size:22px; font-weight:700; letter-spacing:6px; background:var(--highlight); border:2px solid var(--ink); padding:10px 14px; flex:1; text-align:center;">
                             </div>
-                            <button type="button" id="copyGeneratedCode" style="background:var(--ink); color:var(--highlight); border:none; padding:10px 14px; font-family:'Oswald',sans-serif; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap;">COPIER</button>
+                            <button type="button" id="copyGeneratedCode" style="background:var(--ink); color:var(--highlight); border:none; padding:10px 14px; font-family:'Oswald',sans-serif; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap;">COPY</button>
                         </div>
                     </div>
 
-                    <!-- 3. Créer une salle (centré, en bas) -->
+                    <!-- 3. Create a room -->
                     <div style="text-align:center;">
-                        <button type="button" id="createPrivateBtn" class="private-btn" disabled="" style="padding:10px 24px;">🔒 Créer une salle privée</button>
+                        <button type="button" id="createPrivateBtn" class="private-btn" disabled="" style="padding:10px 24px;">🔒 Create a private room</button>
                     </div>
                 </div>
             </form>
         </div>
         <div class="copyright">
-            © 2026 KERNE — Fait avec ❤️ à Casa
+            © 2026 KERNE — Made with ❤️ in Casablanca
         </div>
     </div>
 
-    <div class="loading" id="loading">Connexion en cours...</div>
+    <div class="loading" id="loading">Connecting...</div>
     <div class="toast" id="toast"></div>
 
     <script>
@@ -1150,27 +1145,28 @@
                 aboutNote.classList.remove('show');
         });
 
-        // Restaurer les valeurs sauvegardées
+        // Restore saved values
         window.addEventListener('load', () => {
             const savedName = localStorage.getItem('userName');
             const savedLevel = localStorage.getItem('userLevel');
             if (savedName) { nameInput.value = savedName; nameInput.dispatchEvent(new Event('input')); }
-            if (savedLevel) { levelSelect.value = savedLevel; levelSelect.dispatchEvent(new Event('change')); }
+            const oldLevels = { 'Collège': 'Middle school', 'Lycée': 'High school', 'Prépa': 'Preparatory class', 'Licence': 'Undergraduate', 'Master': "Master's", 'Doctorat': 'Doctorate' };
+            if (savedLevel) { levelSelect.value = oldLevels[savedLevel] || savedLevel; levelSelect.dispatchEvent(new Event('change')); }
             initCamera();
         });
 
-        // Validation nom (identique au serveur pour cohérence)
+        // Match the server's name validation
         const BAD_WORDS = ['fuck', 'shit', 'pute', 'merde', 'con', 'salope', 'connard', 'fdp'];
         function validateName(name) {
             name = name.trim();
-            if (name.length < 2) return { valid: false, message: 'Au moins 2 caractères requis' };
-            if (name.length > 20) return { valid: false, message: 'Maximum 20 caractères' };
-            if (!/^[a-zA-ZÀ-ÿ0-9\s\-_]+$/.test(name)) return { valid: false, message: 'Caractères non autorisés' };
-            if (/(.)\1{4,}/.test(name)) return { valid: false, message: 'Trop de répétitions' };
-            if (/^(test|admin|mod|bot|fake|user|guest)\d*$/i.test(name)) return { valid: false, message: 'Utilise un vrai prénom ou pseudo' };
-            if (/^[0-9]+$/.test(name)) return { valid: false, message: 'Les chiffres seuls ne sont pas acceptés' };
-            if (!/[a-zA-ZÀ-ÿ]/.test(name)) return { valid: false, message: 'Le nom doit contenir au moins une lettre' };
-            if (BAD_WORDS.some(w => new RegExp(`(^|\\s)${w}($|\\s)`, 'i').test(name))) return { valid: false, message: 'Langage inapproprié détecté' };
+            if (name.length < 2) return { valid: false, message: 'Enter at least 2 characters' };
+            if (name.length > 20) return { valid: false, message: 'Maximum 20 characters' };
+            if (!/^[a-zA-ZÀ-ÿ0-9\s\-_]+$/.test(name)) return { valid: false, message: 'Some characters are not allowed' };
+            if (/(.)\1{4,}/.test(name)) return { valid: false, message: 'Too many repeated characters' };
+            if (/^(test|admin|mod|bot|fake|user|guest)\d*$/i.test(name)) return { valid: false, message: 'Use a real name or nickname' };
+            if (/^[0-9]+$/.test(name)) return { valid: false, message: 'A name cannot contain only numbers' };
+            if (!/[a-zA-ZÀ-ÿ]/.test(name)) return { valid: false, message: 'Include at least one letter' };
+            if (BAD_WORDS.some(w => new RegExp(`(^|\\s)${w}($|\\s)`, 'i').test(name))) return { valid: false, message: 'Please choose a different name' };
             return { valid: true };
         }
 
@@ -1214,30 +1210,30 @@
             if (cameraRequesting || cameraAuthorized) return;
             cameraRequesting = true;
             retryCameraBtn.disabled = true;
-            if (manual) showToast("Demande d'accès à la caméra…");
+            if (manual) showToast("Requesting camera access…");
             try {
                 if (!navigator.mediaDevices?.getUserMedia) throw new Error('UnsupportedMedia');
                 localStream = await navigator.mediaDevices.getUserMedia({
                     video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-                    audio: false // Pas besoin de l'audio ici, juste prévisualisation
+                    audio: false // Preview only
                 });
                 localVideo.srcObject = localStream;
                 cameraAuthorized = true;
-                cameraStatus.textContent = '✓ CAMÉRA ACTIVE';
+                cameraStatus.textContent = '✓ CAMERA ON';
                 cameraStatus.style.background = '#4caf50';
                 cameraPermissionHelp.style.display = 'none';
                 checkFormValidity();
-                if (manual) showToast('Caméra activée');
+                if (manual) showToast('Camera enabled');
             } catch (err) {
-                console.error('Erreur caméra:', err);
-                cameraStatus.textContent = 'CAMÉRA DÉSACTIVÉE';
+                console.error('Camera error:', err);
+                cameraStatus.textContent = 'CAMERA OFF';
                 cameraStatus.style.background = '#f44336';
                 cameraPermissionHelp.style.display = 'block';
                 const message = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'
-                    ? "Accès bloqué par le navigateur. Autorise la caméra dans les réglages du site, puis réessaie."
-                    : err.name === 'NotFoundError' ? 'Aucune caméra détectée sur cet appareil.'
-                    : err.name === 'NotReadableError' ? 'Caméra occupée par une autre application. Ferme-la, puis réessaie.'
-                    : 'Caméra indisponible dans ce navigateur. Essaie Chrome, Safari ou Firefox à jour.';
+                    ? "Camera access is blocked. Allow it in your site settings, then try again."
+                    : err.name === 'NotFoundError' ? 'No camera found on this device.'
+                    : err.name === 'NotReadableError' ? 'Camera is in use by another app. Close it and try again.'
+                    : 'Camera unavailable in this browser. Try an up-to-date Chrome, Safari or Firefox.';
                 document.getElementById('cameraHelpText').textContent = message;
                 if (manual) showToast(message, true);
             } finally {
@@ -1261,12 +1257,12 @@
             document.getElementById('joinPrivateBtn').disabled = !formOk || !/^\d{6}$/.test(document.getElementById('roomCodeInput').value.trim());
         }
 
-        // Générer un code à six chiffres
+        // Generate a six-digit room code
         function generateCode() {
             return String(Math.floor(100000 + Math.random() * 900000));
         }
 
-        // Créer une salle privée
+        // Create a private room
         document.getElementById('createPrivateBtn').addEventListener('click', () => {
             const code = generateCode();
             document.getElementById('generatedCodeDisplay').textContent = code;
@@ -1275,22 +1271,22 @@
             checkFormValidity();
         });
 
-        // Copier le code généré
+        // Copy the generated code
         document.getElementById('copyGeneratedCode').addEventListener('click', () => {
             const code = document.getElementById('generatedCodeDisplay').textContent;
             navigator.clipboard.writeText(code).then(() => {
                 const btn = document.getElementById('copyGeneratedCode');
-                btn.textContent = '✓ COPIÉ';
-                setTimeout(() => btn.textContent = 'COPIER', 2000);
+                btn.textContent = '✓ COPIED';
+                setTimeout(() => btn.textContent = 'COPY', 2000);
             });
         });
 
-        // Rejoindre via code saisi
+        // Join using an entered code
         document.getElementById('joinPrivateBtn').addEventListener('click', () => {
             document.getElementById('joinForm').requestSubmit();
         });
 
-        // Activer joinPrivateBtn quand on tape un code
+        // Enable private join when a code is entered
         document.getElementById('roomCodeInput').addEventListener('input', checkFormValidity);
 
         joinForm.addEventListener('submit', async (e) => {
@@ -1301,16 +1297,16 @@
 
             const level = levelSelect.value;
 
-            // Sauvegarder pour pré-remplir au prochain passage
+            // Save for the next visit
             localStorage.setItem('userName', name);
             localStorage.setItem('userLevel', level);
 
-            // Passer les données à room.html via sessionStorage
+            // Pass room details through sessionStorage
             sessionStorage.setItem('userName', name);
             sessionStorage.setItem('userLevel', level);
-            // Le bouton public rejoint toujours une salle publique, même si un code est affiché.
+            // The public button always joins a public room.
             const roomCode = e.submitter === joinBtn ? '' : document.getElementById('roomCodeInput').value.trim();
-            if (roomCode && !/^\d{6}$/.test(roomCode)) { showToast('Code de salle invalide', true); return; }
+            if (roomCode && !/^\d{6}$/.test(roomCode)) { showToast('Invalid room code', true); return; }
             if (roomCode) sessionStorage.setItem('privateRoomCode', roomCode);
             else sessionStorage.removeItem('privateRoomCode');
             const userId = localStorage.getItem('userId') || `user-${crypto.randomUUID()}`;
@@ -1319,15 +1315,15 @@
 
             loading.classList.add('active');
             joinBtn.disabled = true;
-            joinBtn.textContent = '⚡ Connexion...';
+            joinBtn.textContent = '⚡ Connecting...';
 
-            // Libérer la caméra proprement (évite le bug "Device in Use" sur Windows/Chrome)
+            // Release the camera before navigating
             if (localStream) {
                 localStream.getTracks().forEach(t => t.stop());
                 localStream = null;
             }
 
-            // Petit délai pour que le driver relâche la caméra avant la navigation (Safari)
+            // Give Safari a moment to release the camera
             setTimeout(() => { window.location.href = 'room.html'; }, 80);
         });
 
@@ -1353,7 +1349,7 @@
             document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
         }
 
-        // Auto-détecter iOS vs Android pour afficher le bon onglet par défaut
+        // Select the default install tab based on the platform
         window.addEventListener('load', () => {
             const ua = navigator.userAgent;
             if (/android/i.test(ua)) switchInstallTab('android');
