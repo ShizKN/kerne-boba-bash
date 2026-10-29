@@ -65,7 +65,7 @@ class SignalingSocket {
         }
         for (const [id, pending] of this.pending) {
             clearTimeout(pending.timer);
-            pending.callback(new Error('Connexion interrompue'));
+            pending.callback(new Error('Connection interrupted'));
             this.pending.delete(id);
         }
     }
@@ -77,11 +77,11 @@ class SignalingSocket {
 
     timeout(ms) {
         return { emit: (event, callback) => {
-            if (this.ws?.readyState !== WebSocket.OPEN) return callback(new Error('Hors ligne'));
+            if (this.ws?.readyState !== WebSocket.OPEN) return callback(new Error('Offline'));
             const id = crypto.randomUUID();
             const timer = setTimeout(() => {
                 this.pending.delete(id);
-                callback(new Error('Délai dépassé'));
+                callback(new Error('Timed out'));
             }, ms);
             this.pending.set(id, { callback, timer });
             this.ws.send(JSON.stringify({ event, id }));
@@ -94,7 +94,7 @@ class SignalingSocket {
         const ws = this.ws;
         this.ws = null;
         this.dropConnection();
-        if (ws && ws.readyState <= WebSocket.OPEN) ws.close(1000, 'Reconnexion');
+        if (ws && ws.readyState <= WebSocket.OPEN) ws.close(1000, 'Reconnecting');
         return this;
     }
 }
