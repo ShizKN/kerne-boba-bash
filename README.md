@@ -1,17 +1,17 @@
 # KERNE
 
-Salles d’étude collaboratives : vidéo, audio, chat, tableaux blancs et partage d’écran. [Voir le site](https://kerne.apospace.com).
+Collaborative study rooms with video, audio, chat, whiteboards, and screen sharing. [Open the live site](https://kerne.apospace.com).
 
-## Code à examiner
+## Code to review
 
-- `site/index.html` : accueil et accès aux salles.
-- `site/room.html` : interface et logique des salles.
-- `site/signaling.js` : connexion temps réel et reconnexion.
-- `worker/index.js` : attribution des salles, signalisation WebRTC, chat et tableaux blancs.
+- `site/index.html`: home page and room entry.
+- `site/room.html`: room interface and client-side logic.
+- `site/signaling.js`: real-time connection and reconnection.
+- `worker/index.js`: room assignment, WebRTC signaling, chat, and shared whiteboards.
 
-Le site est statique et fonctionne sans compilation. Le Worker Cloudflare et son Durable Object synchronisent les élèves. La vidéo et l’audio utilisent WebRTC ; les identifiants TURN temporaires sont générés côté Worker.
+The site is static and needs no build step. A Cloudflare Worker with a Durable Object coordinates participants. Audio and video use WebRTC; the Worker creates short-lived TURN credentials. No TURN secret is included in this repository.
 
-## Lancer et publier
+## Run and deploy
 
 ```sh
 cd worker
@@ -22,12 +22,12 @@ cd ..
 npx wrangler pages deploy site --project-name kernee --branch main
 ```
 
-Les secrets `TURN_KEY_ID` et `TURN_KEY_API_TOKEN` doivent être configurés dans le Worker Cloudflare. Aucune clé n’est incluse ici. Un domaine local doit être ajouté à la liste des origines autorisées pour tester un autre hôte.
+Configure `TURN_KEY_ID` and `TURN_KEY_API_TOKEN` as Cloudflare Worker secrets. If you test from another local hostname, add it to the allowed origins in `worker/index.js`.
 
-## Vérification
+## Verification
 
-Le protocole de salle, le chat, les tableaux blancs et les métadonnées de partage ont été testés localement avec deux connexions. La syntaxe des scripts et le Worker ont été vérifiés. La qualité audio/vidéo dépend aussi du navigateur et du réseau des participants.
+Two local room connections were used to check joining, chat, whiteboard synchronization, and screen-share signaling. JavaScript syntax and the Worker dry run were checked. Audio and video quality also depend on each participant's browser and network.
 
-## Droits d’utilisation
+## Rights
 
-© 2026 Yassine El Faidi. Tous droits réservés sur le code original KERNE. Ce dépôt est public pour examen par Boba Bash ; aucune licence de réutilisation du code original n’est accordée. La bibliothèque tierce conserve sa licence dans `site/vendor/simplepeer.LICENSE`.
+© 2026 Yassine El Faidi. All rights reserved for the original KERNE code. This public repository is provided for Boba Bash review; no license to reuse the original code is granted. The third-party library retains its license in `site/vendor/simplepeer.LICENSE`.
