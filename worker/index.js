@@ -1,7 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 
 const MAX_ROOM_SIZE = 4;
-const LEVELS = new Set(['Collège', 'Lycée', 'Prépa', 'Licence', 'Master', 'Doctorat']);
+const LEVELS = new Set(['Middle school', 'High school', 'Preparatory class', 'Undergraduate', "Master's", 'Doctorate']);
+const LEGACY_LEVELS = { 'Collège': 'Middle school', 'Lycée': 'High school', 'Prépa': 'Preparatory class', 'Licence': 'Undergraduate', 'Master': "Master's", 'Doctorat': 'Doctorate' };
 const STUN = [{ urls: 'stun:stun.cloudflare.com:3478' }];
 const MAX_BOARD_BYTES = 500_000;
 
@@ -36,7 +37,7 @@ function isAllowedOrigin(origin) {
 export class KerneRooms extends DurableObject {
     async fetch(request) {
         if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
-            return new Response('WebSocket requis', { status: 426 });
+            return new Response('WebSocket required', { status: 426 });
         }
         const [client, server] = Object.values(new WebSocketPair());
         const socketId = crypto.randomUUID();
@@ -67,13 +68,14 @@ export class KerneRooms extends DurableObject {
         if (event === 'join-room') {
             if (state.roomId) return;
             const { name, level, privateRoomCode } = data || {};
+            const normalizedLevel = LEGACY_LEVELS[level] || level;
             if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 20 ||
-                !/^[a-zA-ZÀ-ÿ0-9\s\-_]+$/.test(name) || !LEVELS.has(level)) {
-                send(ws, 'error', { message: 'Nom ou niveau invalide' });
+                !/^[a-zA-ZÀ-ÿ0-9\s\-_]+$/.test(name) || !LEVELS.has(normalizedLevel)) {
+                send(ws, 'error', { message: 'Invalid name or study level' });
                 return;
             }
             if (privateRoomCode && !/^\d{6}$/.test(privateRoomCode)) {
-                send(ws, 'error', { message: 'Code de salle invalide' });
+                send(ws, 'error', { message: 'Invalid room code' });
                 return;
             }
             let roomId;
@@ -88,13 +90,13 @@ export class KerneRooms extends DurableObject {
             }
             const existing = this.sockets(roomId);
             if (existing.length >= MAX_ROOM_SIZE) {
-                send(ws, 'error', { message: 'La salle est pleine' });
+                send(ws, 'error', { message: 'The room is full' });
                 return;
             }
             const user = {
                 socketId: state.socketId, peerId: state.socketId,
                 userId: typeof data.userId === 'string' ? data.userId.slice(0, 80) : state.socketId,
-                name: name.trim(), level, joinedAt: Date.now()
+                name: name.trim(), level: normalizedLevel, joinedAt: Date.now()
             };
             ws.serializeAttachment({ ...state, ...user, roomId, mediaState: { cam: true } });
             const users = [...existing, ws].map(peer => {
@@ -141,7 +143,7 @@ export class KerneRooms extends DurableObject {
         }
         if (event === 'screen-share-started' && typeof data?.streamId === 'string' && data.streamId.length <= 120) {
             if (this.sockets(state.roomId).some(peer => peer !== ws && peer.deserializeAttachment()?.screenStreamId)) {
-                send(ws, 'screen-share-denied', { message: 'Un écran est déjà partagé dans cette salle' });
+                send(ws, 'screen-share-denied', { message: 'Someone is already sharing their screen in this room' });
                 return;
             }
             ws.serializeAttachment({ ...state, screenStreamId: data.streamId });
@@ -162,7 +164,7 @@ export class KerneRooms extends DurableObject {
             }
             if (event === 'wb-create') {
                 if (boards.length >= 20 || typeof data.id !== 'string' || !/^[\w-]{1,80}$/.test(data.id) || boards.some(b => b.id === data.id)) return;
-                const board = { id: data.id, name: String(data.name || 'Tableau').slice(0, 80), owner: state.name, data: [] };
+                const board = { id: data.id, name: String(data.name || 'Whiteboard').slice(0, 80), owner: state.name, data: [] };
                 boards.push(board);
                 await this.ctx.storage.put(key, boards);
                 this.broadcast(state.roomId, 'wb-create', board, ws);
@@ -202,9 +204,9 @@ export class KerneRooms extends DurableObject {
                 );
                 if (!response.ok) throw new Error(`TURN HTTP ${response.status}`);
                 const body = await response.json();
-                if (!Array.isArray(body.iceServers)) throw new Error('Réponse TURN invalide');
+                if (!Array.isArray(body.iceServers)) throw new Error('Invalid TURN response');
                 result = { iceServers: body.iceServers, turnEnabled: true };
-            } catch (error) { console.error('Cloudflare TURN indisponible', error.message); }
+            } catch (error) { console.error('Cloudflare TURN unavailable', error.message); }
         }
         ws.serializeAttachment({ ...state, cachedIce: result, iceExpiresAt: now + 60 * 60 * 1000 });
         return result;
@@ -224,7 +226,7 @@ export class KerneRooms extends DurableObject {
     }
 
     async webSocketError(ws) {
-        await this.webSocketClose(ws, 1011, 'Connexion interrompue');
+        await this.webSocketClose(ws, 1011, 'Connection interrupted');
     }
 }
 
@@ -233,7 +235,7 @@ export default {
         const path = new URL(request.url).pathname;
         if (path === '/health') return Response.json({ status: 'ok', service: 'kerne-rooms' });
         if (path !== '/ws' || request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('Not found', { status: 404 });
-        if (!isAllowedOrigin(request.headers.get('Origin'))) return new Response('Origin interdit', { status: 403 });
+        if (!isAllowedOrigin(request.headers.get('Origin'))) return new Response('Forbidden origin', { status: 403 });
         return env.ROOMS.get(env.ROOMS.idFromName('kerne-global')).fetch(request);
     }
 };
