@@ -2132,7 +2132,9 @@
                 this.pendingSignals = [];
                 this.lastTransportRestart = 0;
                 this.userName = sessionStorage.getItem('userName');
-                this.userLevel = sessionStorage.getItem('userLevel');
+                const legacyLevels = { 'Collège': 'Middle school', 'Lycée': 'High school', 'Prépa': 'Preparatory class', 'Licence': 'Undergraduate', 'Master': "Master's", 'Doctorat': 'Doctorate' };
+                const savedLevel = sessionStorage.getItem('userLevel');
+                this.userLevel = legacyLevels[savedLevel] || savedLevel;
                 this.userId = sessionStorage.getItem('userId') || `user-${Date.now()}`;
 
                 this.isCamOn = sessionStorage.getItem('isCamOn') !== 'false';
