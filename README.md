@@ -27,3 +27,7 @@ Les secrets `TURN_KEY_ID` et `TURN_KEY_API_TOKEN` doivent être configurés dans
 ## Vérification
 
 Le protocole de salle, le chat, les tableaux blancs et les métadonnées de partage ont été testés localement avec deux connexions. La syntaxe des scripts et le Worker ont été vérifiés. La qualité audio/vidéo dépend aussi du navigateur et du réseau des participants.
+
+## Droits d’utilisation
+
+© 2026 Yassine El Faidi. Tous droits réservés sur le code original KERNE. Ce dépôt est public pour examen par Boba Bash ; aucune licence de réutilisation du code original n’est accordée. La bibliothèque tierce conserve sa licence dans `site/vendor/simplepeer.LICENSE`.
