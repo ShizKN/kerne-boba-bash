@@ -41,18 +41,21 @@ export class KerneRooms extends DurableObject {
         try { const raw = await request.text(); if (raw.length > 512) throw new Error('Too large'); body = JSON.parse(raw); }
         catch (_) { return new Response('Invalid feedback', { status: 400, headers }); }
         if (!body || !Number.isInteger(body.rating) || body.rating < 1 || body.rating > 5 || typeof body.session !== 'string' || !/^[a-f0-9-]{36}$/i.test(body.session)) return new Response('Choose 1–5 stars', { status: 400, headers });
+        const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(v => v.toString(16).padStart(2,'0')).join('');
+        const member = await hash(body.session);
+        if (!this.ctx.getWebSockets().some(ws => ws.readyState === WebSocket.OPEN && ws.deserializeAttachment()?.userId === member && ws.deserializeAttachment()?.roomId))
+            return new Response('Join a call before rating', { status: 403, headers });
         const target = this.env.DISCORD_FEEDBACK_WEBHOOK;
         if (!target) return new Response('Feedback unavailable', { status: 503, headers });
         let endpoint;
         try { endpoint = new URL(target); if (endpoint.protocol !== 'https:' || endpoint.hostname !== 'discord.com' || !/^\/api\/webhooks\/\d+\/[^/]+$/.test(endpoint.pathname)) throw new Error(); }
         catch (_) { return new Response('Feedback unavailable', { status: 503, headers }); }
-        const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-        const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(v => v.toString(16).padStart(2,'0')).join('');
         const network = await hash(ip), visitor = await hash(`${ip}|${body.session}`);
         const now = Date.now();
         const recent = this.ctx.storage.sql.exec('SELECT at FROM feedback_limits WHERE visitor = ?', visitor).toArray()[0];
         const bucket = this.ctx.storage.sql.exec('SELECT started, count FROM feedback_buckets WHERE network = ?', network).toArray()[0];
-        if (recent && now - recent.at < 5 * 60_000 || bucket && now - bucket.started < 60 * 60_000 && bucket.count >= 60) return new Response('Please wait before rating again', { status: 429, headers });
+        if (recent && now - recent.at < 5 * 60_000 || bucket && now - bucket.started < 60 * 60_000 && bucket.count >= 6) return new Response('Please wait before rating again', { status: 429, headers });
         this.ctx.storage.sql.exec('INSERT OR REPLACE INTO feedback_limits (visitor, at) VALUES (?, ?)', visitor, now);
         this.ctx.storage.sql.exec('INSERT OR REPLACE INTO feedback_buckets (network, started, count) VALUES (?, ?, ?)', network, bucket && now - bucket.started < 60 * 60_000 ? bucket.started : now, bucket && now - bucket.started < 60 * 60_000 ? bucket.count + 1 : 1);
         this.ctx.storage.sql.exec('DELETE FROM feedback_limits WHERE at < ?', now - 24 * 60 * 60_000);
