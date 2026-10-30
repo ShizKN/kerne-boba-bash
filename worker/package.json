@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
     "check": "wrangler deploy --dry-run",
+    "test": "node --test games.test.js",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

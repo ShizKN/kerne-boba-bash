@@ -10,1513 +10,9 @@
     <script src="/config.js"></script>
     <script src="/signaling.js"></script>
     <script src="/vendor/simplepeer.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Oswald:wght@600;700&display=swap');
+    <script src="/activities.js" defer></script>
+    <link rel="stylesheet" href="/room.css">
 
-        :root {
-            --paper: #f4f1e8;
-            --paper-dark: #e8e3d6;
-            --ink: #1a1a1a;
-            --highlight: #ffeb3b;
-            --red-pen: #d32f2f;
-            --green: #4caf50;
-            --blue: #2196f3;
-            --tape: rgba(150, 150, 150, .3);
-            --grid-line: rgba(26, 26, 26, 0.08);
-        }
-
-        /* Video status icons */
-        .status-badge {
-            position: absolute;
-            width: clamp(24px, 5vw, 32px);
-            height: clamp(24px, 5vw, 32px);
-            background: var(--red-pen);
-            border: 2px solid white;
-            border-radius: 50%;
-            display: none;
-            /* Hidden by default */
-            align-items: center;
-            justify-content: center;
-            z-index: 20;
-            box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-            pointer-events: none;
-            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        .status-badge svg {
-            width: 60%;
-            height: 60%;
-            stroke: white;
-            fill: none;
-            stroke-width: 2.5;
-        }
-
-        /* Microphone: bottom right */
-        .status-mic {
-            bottom: 10px;
-            right: 10px;
-        }
-
-        /* Sound: top left */
-        .status-sound {
-            top: 10px;
-            left: 10px;
-        }
-
-        /* Classes toggled by JavaScript */
-        .video-element.mic-off .status-mic {
-            display: flex;
-        }
-
-        .video-element.sound-off .status-sound {
-            display: flex;
-        }
-
-        @keyframes popIn {
-            from {
-                transform: scale(0);
-            }
-
-            to {
-                transform: scale(1);
-            }
-        }
-
-        /* --- STYLES TABLEAU BLANC --- */
-        .board-btn-wrapper {
-            position: fixed;
-            bottom: clamp(25px, 5vw, 35px);
-            right: clamp(25px, 5vw, 35px);
-            z-index: 100;
-            transition: opacity 0.3s, transform 0.3s;
-        }
-
-        body.sidebar-open .board-btn-wrapper,
-        body.sidebar-open .sound-control-wrapper {
-            opacity: 0;
-            pointer-events: none;
-            transform: translateY(20px);
-        }
-
-        .board-toggle-btn {
-            width: clamp(40px, 8vw, 50px);
-            height: clamp(40px, 8vw, 50px);
-            border-radius: 50%;
-            border: 3px solid var(--ink);
-            background: white;
-            cursor: pointer;
-            transition: all .3s cubic-bezier(.25, .8, .25, 1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 3px 3px 0 rgba(0, 0, 0, .1);
-            position: relative;
-        }
-
-        .board-toggle-btn:hover {
-            transform: scale(1.1);
-            box-shadow: 4px 4px 0 rgba(0, 0, 0, .15);
-        }
-
-        .board-toggle-btn.active {
-            background: var(--highlight);
-        }
-
-        .board-toggle-btn.has-notif::after {
-            content: '';
-            position: absolute;
-            top: -2px;
-            right: -2px;
-            width: 12px;
-            height: 12px;
-            background: var(--red-pen);
-            border-radius: 50%;
-            border: 2px solid white;
-            animation: pulse 1.5s infinite;
-        }
-
-        .board-modal {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0.9);
-            width: min(90vw, 1000px);
-            height: min(80vh, 700px);
-            background: var(--paper);
-            border: 3px solid var(--ink);
-            box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.2);
-            z-index: 3000;
-            display: none;
-            flex-direction: column;
-            opacity: 0;
-            transition: opacity 0.3s, transform 0.3s;
-        }
-
-        .board-modal.show {
-            transform: translate(-50%, -50%) scale(1) rotate(-0.5deg);
-            opacity: 1;
-            display: flex;
-        }
-
-        @media (max-width: 768px) {
-            .board-modal {
-                width: 100% !important;
-                height: 100% !important;
-                top: 0;
-                left: 0;
-                transform: none !important;
-                border: none;
-                border-radius: 0;
-            }
-
-            .board-modal.show {
-                transform: none !important;
-            }
-
-            .board-header::before {
-                display: none;
-            }
-        }
-
-        .board-header {
-            padding: 10px 15px;
-            border-bottom: 2px dashed var(--ink);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--paper-dark);
-            position: relative;
-            flex-shrink: 0;
-        }
-
-        .board-header::before {
-            content: '';
-            position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%) rotate(2deg);
-            width: 100px;
-            height: 20px;
-            background: var(--tape);
-        }
-
-        .board-title {
-            font-family: 'Oswald', sans-serif;
-            font-weight: 700;
-            text-transform: uppercase;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 70%;
-        }
-
-        .board-content {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-            display: flex;
-        }
-
-        #boardListView {
-            width: 100%;
-            padding: 20px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .create-board-btn {
-            padding: 15px;
-            border: 3px dashed var(--ink);
-            background: rgba(255, 255, 255, 0.5);
-            font-family: 'Courier Prime', monospace;
-            cursor: pointer;
-            text-transform: uppercase;
-            font-weight: bold;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .create-board-btn:hover {
-            background: white;
-            border-style: solid;
-            transform: translateY(-2px);
-        }
-
-        .board-item {
-            background: white;
-            border: 2px solid var(--ink);
-            padding: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s;
-        }
-
-        .board-item:hover {
-            transform: translateX(5px);
-            border-color: var(--highlight);
-        }
-
-        .board-item-meta {
-            font-size: 11px;
-            opacity: 0.6;
-        }
-
-        .delete-board-btn {
-            background: none;
-            border: none;
-            color: var(--red-pen);
-            cursor: pointer;
-            padding: 5px;
-            font-weight: bold;
-            font-size: 18px;
-        }
-
-        #boardDrawView {
-            width: 100%;
-            height: 100%;
-            display: none;
-            flex-direction: column;
-        }
-
-        #boardDrawView.active {
-            display: flex;
-        }
-
-        .canvas-toolbar {
-            padding: 8px;
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-            background: rgba(255, 255, 255, 0.95);
-            border-bottom: 2px solid var(--ink);
-            align-items: center;
-            flex-wrap: wrap;
-            z-index: 10;
-        }
-
-        .tool-btn {
-            width: 36px;
-            height: 36px;
-            border: 2px solid var(--ink);
-            border-radius: 4px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: white;
-            transition: all 0.2s;
-        }
-
-        .tool-btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .tool-btn.active {
-            background: var(--highlight);
-            box-shadow: 2px 2px 0 var(--ink);
-            transform: translate(-1px, -1px);
-        }
-
-        .color-dot {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            border: 2px solid transparent;
-            cursor: pointer;
-            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
-        }
-
-        .color-dot.active {
-            border-color: var(--ink);
-            transform: scale(1.1);
-        }
-
-        .separator {
-            width: 2px;
-            height: 20px;
-            background: var(--ink);
-            margin: 0 2px;
-            opacity: 0.2;
-        }
-
-        .canvas-container {
-            flex: 1;
-            position: relative;
-            overflow: hidden;
-            background-color: white;
-            background-image: radial-gradient(var(--grid-line) 1px, transparent 1px);
-            background-size: 20px 20px;
-            touch-action: none;
-        }
-
-        #drawingCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            cursor: crosshair;
-            touch-action: none;
-        }
-
-        #textInputWrapper {
-            position: absolute;
-            display: none;
-            z-index: 20;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 2px;
-            border: 2px dashed var(--highlight);
-            box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.2);
-            border-radius: 4px;
-        }
-
-        #textInputOverlay {
-            background: transparent;
-            border: none;
-            font-family: 'Courier Prime', monospace;
-            font-size: 20px;
-            color: var(--ink);
-            outline: none;
-            min-width: 150px;
-        }
-
-        #textInputConfirm {
-            display: inline-block;
-            background: var(--green);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 2px 6px;
-            margin-left: 5px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-        .close-board-modal {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: var(--ink);
-            transition: color 0.2s;
-        }
-
-        .close-board-modal:hover {
-            color: var(--red-pen);
-        }
-
-        /* ------------------------------------------- */
-        @keyframes fadeInScale {
-            from {
-                opacity: 0;
-                transform: scale(0.8);
-            }
-
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
-        }
-
-        @keyframes slideInFromBottom {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-            }
-
-            50% {
-                transform: scale(1.2);
-            }
-
-            100% {
-                transform: scale(1);
-            }
-        }
-
-        @keyframes pulseGlow {
-
-            0%,
-            100% {
-                box-shadow: 3px 3px 0 rgba(0, 0, 0, .1);
-            }
-
-            50% {
-                box-shadow: 3px 3px 0 rgba(0, 0, 0, .1), 0 0 15px rgba(255, 235, 59, 0.5);
-            }
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html,
-        body {
-            height: 100%;
-            height: 100dvh;
-            overflow: hidden;
-        }
-
-        body {
-            font-family: 'Courier Prime', monospace;
-            background: linear-gradient(135deg, #e8e3d6 0%, #d4cfc0 100%);
-            color: var(--ink);
-            position: relative;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, .02)2px, rgba(0, 0, 0, .02)4px);
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        .app-container {
-            display: grid;
-            grid-template-columns: 1fr 320px;
-            grid-template-rows: 60px 1fr 80px;
-            height: 100%;
-            height: 100dvh;
-            gap: clamp(8px, 1.5vw, 15px);
-            padding: clamp(8px, 1.5vw, 15px);
-            padding-bottom: clamp(15px, 3vw, 25px);
-            position: relative;
-            z-index: 1;
-            overflow: hidden;
-            transition: grid-template-columns .4s cubic-bezier(.25, .8, .25, 1);
-        }
-
-        .app-container.sidebar-closed {
-            grid-template-columns: 1fr 0;
-        }
-
-        .header {
-            grid-column: 1/-1;
-            background: var(--highlight);
-            border: 3px solid var(--ink);
-            padding: 0 clamp(15px, 3vw, 25px);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: 5px 5px 0 rgba(0, 0, 0, .1);
-            position: relative;
-            z-index: 10;
-        }
-
-        .header::before {
-            content: '';
-            position: absolute;
-            top: -10px;
-            left: 20px;
-            width: clamp(60px, 12vw, 80px);
-            height: 20px;
-            background: var(--tape);
-            border: 1px solid rgba(0, 0, 0, .1);
-            transform: rotate(-5deg);
-        }
-
-        .logo-header {
-            font-family: 'Oswald', sans-serif;
-            font-size: clamp(18px, 3.5vw, 28px);
-            font-weight: 700;
-            letter-spacing: -1px;
-            text-transform: uppercase;
-        }
-
-        .room-info {
-            font-size: clamp(10px, 2vw, 13px);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            background: var(--ink);
-            color: var(--highlight);
-            padding: clamp(6px, 1.2vw, 8px) clamp(12px, 2.5vw, 15px);
-            border-radius: 20px;
-            font-weight: 700;
-        }
-
-        .permission-notice {
-            display: none;
-            position: fixed;
-            z-index: 100;
-            top: 82px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: min(560px, calc(100vw - 24px));
-            padding: 12px;
-            background: #fff8d6;
-            border: 2px solid var(--ink);
-            box-shadow: 4px 4px 0 rgba(0, 0, 0, .15);
-            font-size: 13px;
-            line-height: 1.4;
-        }
-        .permission-notice.show { display: block; }
-        .permission-notice button {
-            margin: 8px 8px 0 0;
-            padding: 7px 10px;
-            border: 2px solid var(--ink);
-            background: var(--highlight);
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .video-grid {
-            background: var(--paper);
-            border: 3px solid var(--ink);
-            box-shadow: 6px 6px 0 rgba(0, 0, 0, .1);
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-content: center;
-            gap: 10px;
-            /* FIX: Gap fixe et propre */
-            padding: 10px;
-            /* Fixed padding keeps the content centered */
-            transition: all .3s;
-            z-index: 5;
-        }
-        .video-grid.has-screen-share {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(180px, 28%);
-            grid-template-rows: repeat(var(--camera-count, 1), minmax(0, 1fr));
-            align-content: stretch;
-        }
-        .video-grid.has-screen-share .screen-share {
-            grid-column: 1;
-            grid-row: 1 / -1;
-            width: 100% !important;
-            height: 100% !important;
-            min-width: 0;
-            min-height: 0;
-        }
-        .video-grid.has-screen-share .video-element:not(.screen-share) {
-            grid-column: 2;
-            width: 100% !important;
-            height: 100% !important;
-            min-width: 0;
-            min-height: 0;
-        }
-        .video-grid.has-screen-share .video-element:not(.screen-share) video { object-fit: cover; background: #111; }
-        .screen-share video { object-fit: contain !important; background: #111; }
-
-        .video-element {
-            position: relative;
-            background: var(--paper);
-            border: 3px solid var(--ink);
-            overflow: hidden;
-            border-radius: clamp(8px, 1.5vw, 12px);
-            transition: width .3s, height .3s;
-            animation: fadeInScale 0.4s cubic-bezier(.25, .8, .25, 1);
-            will-change: width, height;
-        }
-
-        .video-element.joining {
-            animation: bounceIn 0.6s cubic-bezier(.25, .8, .25, 1);
-        }
-
-        .video-element video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .video-element:hover .video-overlay {
-            transform: translateY(0);
-        }
-
-        .video-avatar {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background-color: var(--paper);
-            background-image: linear-gradient(var(--grid-line)1px, transparent 1px), linear-gradient(90deg, var(--grid-line)1px, transparent 1px);
-            background-size: 20px 20px;
-        }
-
-        .avatar-circle {
-            min-width: 80px;
-            min-height: 80px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 4px solid var(--ink);
-            background: var(--highlight);
-            font-size: clamp(30px, 6vw, 45px);
-            flex-shrink: 0;
-            font-family: 'Oswald', sans-serif;
-            font-weight: 700;
-            box-shadow: 4px 4px 0 var(--ink);
-            transform: rotate(-2deg);
-            margin-bottom: 10px;
-            transition: background 0.3s ease;
-        }
-
-        .avatar-circle.color-1 {
-            background: #FFB74D;
-        }
-
-        .avatar-circle.color-2 {
-            background: #81C784;
-        }
-
-        .avatar-circle.color-3 {
-            background: #64B5F6;
-        }
-
-        .avatar-circle.color-4 {
-            background: #BA68C8;
-        }
-
-        .avatar-circle.color-5 {
-            background: #FF8A65;
-        }
-
-        .avatar-circle.color-6 {
-            background: #4DB6AC;
-        }
-
-        .avatar-name {
-            font-family: 'Oswald', sans-serif;
-            font-size: clamp(14px, 2.8vw, 18px);
-            font-weight: 700;
-            color: var(--ink);
-            text-align: center;
-            margin-top: 5px;
-            padding: 0 10px;
-        }
-
-        .video-overlay {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: linear-gradient(transparent, rgba(0, 0, 0, .7));
-            padding: clamp(8px, 1.5vw, 12px) clamp(10px, 2vw, 15px);
-            transform: translateY(0);
-            transition: transform .3s ease;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .video-name {
-            color: white;
-            font-size: clamp(11px, 2.2vw, 14px);
-            font-weight: 700;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, .5);
-        }
-
-        .fullscreen-btn {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 32px;
-            height: 32px;
-            background: rgba(0, 0, 0, 0.7);
-            border: 2px solid white;
-            border-radius: 6px;
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-            z-index: 10;
-            opacity: 1;
-            transform: scale(1);
-        }
-
-        .video-element:hover .fullscreen-btn {
-            opacity: 1;
-            transform: scale(1);
-        }
-
-        .fullscreen-btn:hover {
-            background: var(--highlight);
-            color: var(--ink);
-            border-color: var(--ink);
-            transform: scale(1.1);
-        }
-
-        .video-grid.fullscreen-mode .video-element {
-            display: none;
-        }
-
-        .video-grid.fullscreen-mode .video-element.fullscreen-active {
-            display: block;
-            width: 100% !important;
-            height: 100% !important;
-        }
-        .video-grid.has-screen-share.fullscreen-mode { display: flex; }
-
-        .controls {
-            grid-column: 1/-1;
-            background: var(--paper);
-            border: 3px solid var(--ink);
-            box-shadow: 6px 6px 0 rgba(0, 0, 0, .1);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: clamp(15px, 3vw, 25px);
-            padding: clamp(10px, 2vw, 15px);
-            z-index: 50;
-        }
-
-        .control-wrapper {
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .control-btn {
-            width: clamp(40px, 8vw, 50px);
-            height: clamp(40px, 8vw, 50px);
-            border-radius: 50%;
-            border: 3px solid var(--ink);
-            background: white;
-            cursor: pointer;
-            transition: all .3s cubic-bezier(.25, .8, .25, 1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 3px 3px 0 rgba(0, 0, 0, .1);
-            position: relative;
-        }
-
-        .control-btn.toggling {
-            animation: pulseGlow 0.5s ease-out;
-        }
-
-        .device-selector-btn {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            border: 2px solid var(--ink);
-            background: white;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all .2s;
-            box-shadow: 2px 2px 0 rgba(0, 0, 0, .1);
-        }
-
-        .device-selector-btn:hover {
-            transform: scale(1.1);
-            background: var(--highlight);
-        }
-
-        .device-selector-btn svg {
-            width: 12px;
-            height: 12px;
-            stroke: var(--ink);
-            stroke-width: 2;
-            fill: none;
-        }
-
-        /* Device menus */
-        .device-menu,
-        .sound-device-menu {
-            display: none;
-            position: absolute;
-            bottom: calc(100% + 15px);
-            left: 50%;
-            transform: translateX(-50%);
-            background: white;
-            border: 3px solid var(--ink);
-            border-radius: 8px;
-            box-shadow: 5px 5px 0 rgba(0, 0, 0, .2);
-            min-width: 200px;
-            max-width: 280px;
-            z-index: 100000;
-            /* TOUJOURS AU DESSUS */
-            padding: 5px 0;
-            max-height: 50vh;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .device-menu::after,
-        .sound-device-menu::after {
-            content: '';
-            position: absolute;
-            bottom: -8px;
-            left: 50%;
-            transform: translateX(-50%);
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-top: 8px solid var(--ink);
-        }
-
-        /* Centered popup on mobile */
-        @media(max-width: 768px) {
-
-            .device-menu,
-            .sound-device-menu {
-                position: fixed !important;
-                top: 50% !important;
-                left: 50% !important;
-                bottom: auto !important;
-                transform: translate(-50%, -50%) !important;
-                max-width: 90vw !important;
-                width: 90vw !important;
-                box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5) !important;
-                /* Backdrop sombre */
-            }
-
-            .device-menu::after,
-            .sound-device-menu::after {
-                display: none;
-            }
-        }
-
-        /* SUR DESKTOP (Min-Width 769px) : ALIGNEMENT SON GAUCHE */
-        @media(min-width: 769px) {
-            .sound-device-menu {
-                left: 0 !important;
-                transform: none !important;
-            }
-
-            .sound-device-menu::after {
-                left: 62px !important;
-                transform: none !important;
-            }
-        }
-
-        .device-menu.show,
-        .sound-device-menu.show {
-            display: block;
-        }
-
-        .device-menu-item {
-            padding: 10px 15px;
-            cursor: pointer;
-            border-bottom: 1px solid var(--grid-line);
-            font-size: 13px;
-            transition: background .2s;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .device-menu-item:last-child {
-            border-bottom: none;
-        }
-
-        .device-menu-item:hover {
-            background: var(--highlight);
-        }
-
-        .device-menu-item.selected {
-            background: rgba(76, 175, 80, 0.1);
-            font-weight: 700;
-            border-left: 4px solid var(--green);
-        }
-
-        .control-btn svg {
-            width: clamp(18px, 3.5vw, 24px);
-            height: clamp(18px, 3.5vw, 24px);
-            stroke: var(--ink);
-            stroke-width: 2;
-            fill: none;
-        }
-
-        .control-btn.active {
-            background: var(--green);
-        }
-
-        .control-btn.active svg {
-            stroke: white;
-        }
-
-        .control-btn.inactive,
-        #leaveBtn {
-            background: var(--red-pen);
-        }
-
-        .control-btn.inactive svg,
-        #leaveBtn svg {
-            stroke: white;
-        }
-
-        .control-btn:hover {
-            transform: scale(1.1);
-            box-shadow: 4px 4px 0 rgba(0, 0, 0, .15);
-        }
-
-        #sidebarToggle.has-notif::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 14px;
-            height: 14px;
-            background: var(--red-pen);
-            border-radius: 50%;
-            border: 2px solid white;
-            animation: pulse 1.5s infinite;
-            z-index: 10;
-        }
-
-        .sidebar {
-            background: var(--paper);
-            border: 3px solid var(--ink);
-            box-shadow: 6px 6px 0 rgba(0, 0, 0, .1);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            transition: transform .3s ease;
-            will-change: transform;
-        }
-
-        .sidebar-tabs {
-            display: flex;
-            border-bottom: 3px solid var(--ink);
-            background: rgba(255, 255, 255, 0.5);
-        }
-
-        .sidebar-tab {
-            flex: 1;
-            padding: clamp(10px, 2vw, 15px);
-            border: none;
-            background: transparent;
-            font-family: 'Oswald', sans-serif;
-            font-size: clamp(11px, 2.2vw, 14px);
-            font-weight: 700;
-            cursor: pointer;
-            transition: background .2s;
-            text-transform: uppercase;
-            letter-spacing: .5px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 5px;
-            color: var(--ink);
-            opacity: 0.7;
-        }
-
-        .sidebar-tab:not(:last-child) {
-            border-right: 3px solid var(--ink);
-        }
-
-        .sidebar-tab.active {
-            background: var(--highlight);
-            opacity: 1;
-        }
-
-        .sidebar-tab:hover {
-            background: rgba(255, 235, 59, 0.3);
-        }
-
-        .sidebar-content {
-            flex: 1;
-            overflow-y: auto;
-            position: relative;
-        }
-
-        .tab-panel {
-            display: none;
-            flex-direction: column;
-            height: 100%;
-        }
-
-        .tab-panel.active {
-            display: flex;
-        }
-
-        #chatMessages {
-            flex: 1;
-            overflow-y: auto;
-            padding: clamp(10px, 2vw, 15px);
-            display: flex;
-            flex-direction: column;
-            gap: clamp(8px, 1.5vw, 12px);
-        }
-
-        .chat-message {
-            background: white;
-            border: 2px solid var(--ink);
-            padding: clamp(8px, 1.5vw, 10px);
-            border-radius: 8px;
-            box-shadow: 2px 2px 0 rgba(0, 0, 0, .1);
-            max-width: 85%;
-            word-wrap: break-word;
-        }
-
-        .chat-message.me {
-            background: var(--highlight);
-            align-self: flex-end;
-            margin-left: auto;
-        }
-
-        .chat-message-author {
-            font-weight: 700;
-            font-size: clamp(10px, 2vw, 12px);
-            margin-bottom: 4px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .chat-message-time {
-            font-size: clamp(9px, 1.8vw, 10px);
-            opacity: .6;
-            font-weight: 400;
-        }
-
-        #chatForm {
-            padding: clamp(10px, 2vw, 12px);
-            border-top: 3px solid var(--ink);
-            display: flex;
-            gap: clamp(6px, 1.2vw, 8px);
-            background: rgba(255, 255, 255, 0.8);
-        }
-
-        #chatInput {
-            flex: 1;
-            border: 2px solid var(--ink);
-            padding: clamp(8px, 1.5vw, 10px);
-            font-family: 'Courier Prime', monospace;
-            font-size: clamp(12px, 2.4vw, 14px);
-            border-radius: 20px;
-            background: rgba(255, 255, 255, 0.9);
-        }
-
-        #chatInput:focus {
-            outline: none;
-            border-color: var(--highlight);
-            box-shadow: 0 0 0 2px var(--highlight);
-        }
-
-        .send-btn {
-            width: clamp(35px, 7vw, 40px);
-            height: clamp(35px, 7vw, 40px);
-            border-radius: 50%;
-            border: 2px solid var(--ink);
-            background: var(--green);
-            color: white;
-            font-size: clamp(16px, 3.2vw, 18px);
-            cursor: pointer;
-            transition: all .2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .send-btn:hover {
-            background: #45a049;
-            transform: scale(1.05);
-        }
-
-        #participantsList {
-            padding: clamp(10px, 2vw, 15px);
-            display: flex;
-            flex-direction: column;
-            gap: clamp(8px, 1.5vw, 10px);
-        }
-
-        .participant-item {
-            background: white;
-            border: 2px solid var(--ink);
-            padding: clamp(10px, 2vw, 12px);
-            border-radius: 8px;
-            box-shadow: 2px 2px 0 rgba(0, 0, 0, .1);
-            position: relative;
-            padding-left: clamp(35px, 7vw, 45px);
-            transition: background .2s;
-        }
-
-        .participant-item::before {
-            content: '';
-            position: absolute;
-            left: clamp(10px, 2vw, 12px);
-            top: 50%;
-            transform: translateY(-50%);
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            border: 2px solid var(--ink);
-            background: var(--highlight);
-        }
-
-        .participant-item.color-1::before {
-            background: #FFB74D;
-        }
-
-        .participant-item.color-2::before {
-            background: #81C784;
-        }
-
-        .participant-item.color-3::before {
-            background: #64B5F6;
-        }
-
-        .participant-item.color-4::before {
-            background: #BA68C8;
-        }
-
-        .participant-item.color-5::before {
-            background: #FF8A65;
-        }
-
-        .participant-item.color-6::before {
-            background: #4DB6AC;
-        }
-
-        .participant-name {
-            font-weight: 700;
-            font-size: clamp(12px, 2.4vw, 14px);
-        }
-
-        .toast {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: var(--ink);
-            color: white;
-            padding: 15px 25px;
-            border-radius: 8px;
-            border: 3px solid var(--highlight);
-            box-shadow: 5px 5px 0 rgba(0, 0, 0, .2);
-            font-weight: 700;
-            transform: translateY(150%);
-            transition: transform .3s, opacity .3s, visibility 0s linear 0.3s;
-            z-index: 3000;
-            max-width: 300px;
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-
-        .toast.show {
-            transform: translateY(0);
-            opacity: 1;
-            visibility: visible;
-            pointer-events: auto;
-            transition-delay: 0s;
-            animation: slideInFromBottom 0.4s cubic-bezier(.25, .8, .25, 1);
-        }
-
-        .toast.error {
-            border-color: var(--red-pen);
-            background: var(--red-pen);
-        }
-
-        .toast.warning {
-            border-color: #ff9800;
-            background: #ff9800;
-        }
-
-        .sound-control-wrapper {
-            position: fixed;
-            bottom: clamp(25px, 5vw, 35px);
-            left: clamp(25px, 5vw, 35px);
-            z-index: 100;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            transition: opacity 0.3s, transform 0.3s;
-        }
-
-        .sound-btn {
-            width: clamp(40px, 8vw, 50px);
-            height: clamp(40px, 8vw, 50px);
-            border-radius: 50%;
-            border: 3px solid var(--ink);
-            background: white;
-            cursor: pointer;
-            transition: all .3s cubic-bezier(.25, .8, .25, 1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 3px 3px 0 rgba(0, 0, 0, .1);
-            position: relative;
-        }
-
-        .sound-btn.toggling {
-            animation: pulseGlow 0.5s ease-out;
-        }
-
-        .sound-btn svg {
-            width: clamp(18px, 3.5vw, 24px);
-            height: clamp(18px, 3.5vw, 24px);
-            stroke: var(--ink);
-            stroke-width: 2;
-            fill: none;
-        }
-
-        .sound-btn.active {
-            background: var(--green);
-        }
-
-        .sound-btn.active svg {
-            stroke: white;
-        }
-
-        .sound-btn.inactive {
-            background: var(--red-pen);
-        }
-
-        .sound-btn.inactive svg {
-            stroke: white;
-        }
-
-        .sound-btn:hover {
-            transform: scale(1.1);
-            box-shadow: 4px 4px 0 rgba(0, 0, 0, .15);
-        }
-
-        .sound-device-selector {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            border: 2px solid var(--ink);
-            background: white;
-            cursor: pointer;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            transition: all .2s;
-            box-shadow: 2px 2px 0 rgba(0, 0, 0, .1);
-        }
-
-        .sound-device-selector:hover {
-            transform: scale(1.1);
-            background: var(--highlight);
-        }
-
-        .sound-device-selector svg {
-            width: 12px;
-            height: 12px;
-            stroke: var(--ink);
-            stroke-width: 2;
-            fill: none;
-        }
-
-        @media(max-width:768px) {
-            .sound-control-wrapper {
-                bottom: 100px;
-                left: 16px;
-            }
-
-            .board-btn-wrapper {
-                bottom: 100px;
-                right: 16px;
-            }
-
-            .sound-btn,
-            .board-toggle-btn {
-                width: 42px;
-                height: 42px;
-            }
-
-            .app-container {
-                grid-template-columns: 1fr;
-                grid-template-rows: 55px 1fr 70px;
-                padding: 8px;
-                padding-bottom: max(8px, env(safe-area-inset-bottom));
-                gap: 8px;
-            }
-            .permission-notice { top: 68px; font-size: 12px; }
-            .video-grid.has-screen-share {
-                grid-template-columns: repeat(var(--camera-count, 1), minmax(0, 1fr));
-                grid-template-rows: minmax(0, 1fr) clamp(165px, 30vh, 240px);
-            }
-            .video-grid.has-screen-share .screen-share { grid-column: 1 / -1; grid-row: 1; }
-            .video-grid.has-screen-share .video-element:not(.screen-share) { grid-column: auto; grid-row: 2; }
-            .screen-sharing .sound-control-wrapper,
-            .screen-sharing .board-btn-wrapper { top: 76px; bottom: auto; }
-
-            /* Sidebar en mode absolu/overlay mobile */
-            .sidebar {
-                position: fixed;
-                right: 0;
-                top: 0;
-                bottom: 0;
-                width: 85%;
-                max-width: 320px;
-                z-index: 2000;
-                transform: translateX(100%);
-                box-shadow: -5px 0 15px rgba(0, 0, 0, .3);
-                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-
-            .sidebar.mobile-open {
-                transform: translateX(0);
-            }
-
-            .video-element {
-                border-width: 2px;
-            }
-
-            .controls { padding: 6px; gap: 6px; }
-
-            .control-btn {
-                width: clamp(38px, 12vw, 46px);
-                height: clamp(38px, 12vw, 46px);
-            }
-
-            #chatInput {
-                padding: 14px 12px;
-                font-size: 16px;
-            }
-
-            .send-btn {
-                width: 46px;
-                height: 46px;
-                font-size: 20px;
-            }
-        }
-
-        @media(max-width:340px) {
-            .controls { gap: 4px; padding: 4px; }
-            .device-selector-btn { width: 20px; height: 20px; }
-        }
-
-        .sidebar-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.35);
-            z-index: 1999;
-        }
-
-        .sidebar-overlay.active {
-            display: block;
-        }
-
-        @media (max-height: 500px) and (orientation: landscape) {
-            .app-container {
-                display: block;
-                padding: 0;
-                height: 100dvh;
-                width: 100vw;
-                overflow: hidden;
-            }
-
-            .header {
-                position: absolute;
-                top: 5px;
-                left: 5px;
-                background: transparent;
-                border: none;
-                box-shadow: none;
-                padding: 0;
-                width: auto;
-                z-index: 20;
-            }
-
-            .header::before,
-            .room-info {
-                display: none;
-            }
-
-            .logo-header {
-                font-size: 14px;
-                background: var(--highlight);
-                padding: 2px 5px;
-                border: 2px solid var(--ink);
-            }
-
-            .video-grid {
-                width: 100%;
-                height: 100%;
-                border: none;
-                box-shadow: none;
-                border-radius: 0;
-                padding: 5px;
-            }
-
-            .controls {
-                position: fixed;
-                bottom: 10px;
-                left: 50%;
-                transform: translateX(-50%);
-                right: auto;
-                top: auto;
-                width: auto;
-                height: auto;
-                flex-direction: row;
-                background: transparent;
-                border: none;
-                box-shadow: none;
-                gap: 15px;
-                z-index: 50;
-                padding: 0;
-            }
-
-            .control-btn {
-                width: 50px;
-                height: 50px;
-                opacity: 0.8;
-                box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-            }
-
-            .control-btn:hover {
-                opacity: 1;
-            }
-
-            .sidebar {
-                position: fixed;
-                top: 0;
-                right: 0;
-                bottom: 0;
-                width: 320px;
-                max-width: 60%;
-                background: var(--paper-transparent);
-                backdrop-filter: blur(5px);
-                border-left: 2px solid var(--ink);
-                z-index: 2000;
-                transform: translateX(100%);
-                box-shadow: none;
-            }
-
-            .sidebar.mobile-open {
-                transform: translateX(0);
-            }
-
-            .sidebar-overlay.active {
-                display: block;
-            }
-        }
-    </style>
 </head>
 
 <body>
@@ -1532,7 +28,7 @@
             <button type="button" id="retryRoomMic">Turn on microphone</button>
             <button type="button" id="dismissPermissionNotice">Later</button>
         </div>
-        <div class="video-grid" id="videoGrid"></div>
+        <div class="video-grid" id="videoGrid"><div id="screenStage"></div><div id="cameraStrip"></div></div>
         <div class="sidebar" id="sidebar">
             <div class="sidebar-tabs">
                 <button class="sidebar-tab active" data-tab="chat">CHAT</button>
@@ -1601,82 +97,12 @@
         <div class="sound-device-menu" id="soundMenu"></div>
     </div>
 
-    <div class="board-btn-wrapper">
-        <button class="board-toggle-btn" id="boardToggleBtn" title="Whiteboards">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
-                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
-                <line x1="2" y1="2" x2="22" y2="22"></line>
-            </svg>
-        </button>
-    </div>
-
-    <div class="board-modal" id="boardModal">
-        <div class="board-header">
-            <div class="board-title" id="boardHeaderTitle">WHITEBOARDS</div>
-            <button class="close-board-modal" id="closeBoardModal">×</button>
-        </div>
-
-        <div class="board-content">
-            <div id="boardListView" class="board-view active"
-                style="width:100%; height:100%; overflow-y:auto; display:flex; flex-direction:column;">
-                <div style="padding:20px;">
-                    <div class="create-board-btn" id="createBoardBtn"><span>+</span> New whiteboard</div>
-                    <div id="boardListContainer"
-                        style="display:flex; flex-direction:column; gap:15px; margin-top:20px;"></div>
-                </div>
-            </div>
-
-            <div id="boardDrawView" class="board-view">
-                <div class="canvas-toolbar">
-                    <button class="back-btn" id="backToBoards"
-                        style="font-family:'Oswald'; border:2px solid var(--ink); padding:2px 8px; cursor:pointer; background:white;">↩
-                        BACK</button>
-                    <div class="separator"></div>
-                    <div class="tool-btn active" data-tool="pen" title="Pen"><svg width="18" height="18"
-                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
-                            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
-                        </svg></div>
-                    <div class="tool-btn" data-tool="text" title="Text (T)"><svg width="18" height="18"
-                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="4 7 4 4 20 4 20 7"></polyline>
-                            <line x1="9" y1="20" x2="15" y2="20"></line>
-                            <line x1="12" y1="4" x2="12" y2="20"></line>
-                        </svg></div>
-                    <div class="tool-btn" data-tool="eraser" title="Eraser"><svg width="18" height="18"
-                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="4" width="20" height="12" rx="2" />
-                            <line x1="2" y1="10" x2="22" y2="10" />
-                        </svg></div>
-                    <div class="separator"></div>
-                    <div class="color-dot active" data-color="#1a1a1a" style="background:#1a1a1a"></div>
-                    <div class="color-dot" data-color="#d32f2f" style="background:#d32f2f"></div>
-                    <div class="color-dot" data-color="#2196f3" style="background:#2196f3"></div>
-                    <div class="color-dot" data-color="#4caf50" style="background:#4caf50"></div>
-                    <div class="separator"></div>
-                    <button class="tool-btn" id="undoBtn" title="Undo"><svg width="16" height="16"
-                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 7v6h6" />
-                            <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13" />
-                        </svg></button>
-                    <button class="tool-btn" id="redoBtn" title="Redo"><svg width="16" height="16"
-                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 7v6h-6" />
-                            <path d="M3 17a9 9 0 019-9 9 9 0 016 2.3L21 13" />
-                        </svg></button>
-                </div>
-                <div class="canvas-container" id="canvasContainer">
-                    <canvas id="drawingCanvas"></canvas>
-                    <div id="textInputWrapper">
-                        <input type="text" id="textInputOverlay" placeholder="Type your text">
-                        <button id="textInputConfirm">OK</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <dialog id="screenViewer" aria-labelledby="viewerTitle">
+        <header class="viewer-header"><div><strong id="viewerTitle">Shared screen</strong><small>Pinch or use + to zoom. Drag to explore.</small></div><button id="viewerClose" aria-label="Close full screen view">✕</button></header>
+        <div id="viewerViewport"><video id="viewerVideo" autoplay playsinline muted></video></div>
+        <div id="viewerCameras" aria-label="Call cameras"></div>
+        <footer class="viewer-tools"><button id="viewerOut" aria-label="Zoom out">−</button><output id="viewerZoom">100%</output><button id="viewerIn" aria-label="Zoom in">+</button><button id="viewerFit">Fit</button><button id="viewerCameraToggle" aria-pressed="true">Cameras</button></footer>
+    </dialog>
 
     <div class="toast" id="toast"></div>
 
@@ -1684,441 +110,83 @@
         'use strict';
         let ICE_CONFIG = { iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] };
 
-        // Whiteboard management
-        class WhiteboardManager {
-            constructor(socket, myId) {
-                this.socket = socket;
-                this.myId = myId;
-                this.myName = sessionStorage.getItem('userName') || 'User';
-                this.boards = [];
-                this.currentBoardId = null;
-                this.isDrawing = false;
-                this.color = '#1a1a1a';
-                this.tool = 'pen';
-
-                this.canvas = document.getElementById('drawingCanvas');
-                this.ctx = this.canvas.getContext('2d');
-                this.container = document.getElementById('canvasContainer');
-
-                // Text tool vars
-                this.textWrapper = document.getElementById('textInputWrapper');
-                this.textInput = document.getElementById('textInputOverlay');
-                this.textConfirm = document.getElementById('textInputConfirm');
-                this.isTyping = false;
-
-                // UI Elements
-                this.modal = document.getElementById('boardModal');
-                this.btn = document.getElementById('boardToggleBtn');
-                this.listContainer = document.getElementById('boardListContainer');
-                this.listView = document.getElementById('boardListView');
-                this.drawView = document.getElementById('boardDrawView');
-
-                // History
-                this.undoStack = {};
-                this.redoStack = {};
-
-                this.setupUI();
-                this.setupSocket();
-                setTimeout(() => this.resizeCanvas(), 500);
-            }
-
-            setupUI() {
-                this.btn.onclick = () => {
-                    const isHidden = getComputedStyle(this.modal).display === 'none';
-                    if (isHidden) {
-                        this.modal.classList.add('show');
-                        this.btn.classList.add('active');
-                        this.btn.classList.remove('has-notif');
-                        this.renderList();
-                        if (this.currentBoardId) setTimeout(() => this.resizeCanvas(), 100);
-                    } else {
-                        this.modal.classList.remove('show');
-                        this.btn.classList.remove('active');
-                    }
+        class ScreenViewer {
+            constructor() {
+                this.dialog = document.getElementById('screenViewer');
+                this.viewport = document.getElementById('viewerViewport');
+                this.video = document.getElementById('viewerVideo');
+                this.scale = 1; this.x = 0; this.y = 0; this.pointers = new Map();
+                document.getElementById('viewerClose').onclick = () => this.dialog.close();
+                document.getElementById('viewerFit').onclick = () => { this.scale = 1; this.x = this.y = 0; this.paint(); };
+                document.getElementById('viewerIn').onclick = () => this.zoom(this.scale + .5);
+                document.getElementById('viewerOut').onclick = () => this.zoom(this.scale - .5);
+                document.getElementById('viewerCameraToggle').onclick = event => {
+                    const rail = document.getElementById('viewerCameras'); rail.hidden = !rail.hidden;
+                    event.currentTarget.setAttribute('aria-pressed', String(!rail.hidden)); this.paint();
                 };
-                document.getElementById('closeBoardModal').onclick = () => {
-                    this.modal.classList.remove('show');
-                    this.btn.classList.remove('active');
-                };
-
-                document.getElementById('createBoardBtn').onclick = () => this.createBoard();
-                document.getElementById('backToBoards').onclick = () => {
-                    this.listView.style.display = 'flex';
-                    this.drawView.style.display = 'none';
-                    document.getElementById('boardHeaderTitle').textContent = "WHITEBOARDS";
-                    this.currentBoardId = null;
-                    if (this.isTyping) this.cancelText();
-                };
-
-                document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
-                    b.onclick = () => {
-                        document.querySelectorAll('.tool-btn[data-tool]').forEach(x => x.classList.remove('active'));
-                        b.classList.add('active');
-                        this.tool = b.dataset.tool;
-                    };
+                this.dialog.addEventListener('close', () => { this.video.srcObject = null; document.getElementById('viewerCameras').replaceChildren(); this.pointers.clear(); });
+                this.video.addEventListener('loadedmetadata', () => this.paint());
+                this.viewport.addEventListener('dblclick', () => this.zoom(this.scale > 1 ? 1 : 2));
+                this.viewport.addEventListener('wheel', event => { event.preventDefault(); this.zoom(this.scale * (event.deltaY < 0 ? 1.1 : .9)); }, { passive: false });
+                this.viewport.addEventListener('pointerdown', event => {
+                    this.viewport.setPointerCapture(event.pointerId);
+                    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+                    this.distance = this.pinchDistance();
                 });
-                document.querySelectorAll('.color-dot').forEach(d => {
-                    d.onclick = () => {
-                        document.querySelectorAll('.color-dot').forEach(x => x.classList.remove('active'));
-                        d.classList.add('active');
-                        this.color = d.dataset.color;
-                    };
+                this.viewport.addEventListener('pointermove', event => {
+                    const last = this.pointers.get(event.pointerId); if (!last) return;
+                    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+                    if (this.pointers.size === 2) {
+                        const distance = this.pinchDistance(); if (this.distance > 0) this.zoom(this.scale * distance / this.distance);
+                        this.distance = distance;
+                    } else { this.x += event.clientX - last.x; this.y += event.clientY - last.y; this.paint(); }
                 });
-                document.getElementById('undoBtn').onclick = () => this.undo();
-                document.getElementById('redoBtn').onclick = () => this.redo();
-
-                // DRAWING EVENTS - UNIFIED
-                const start = (e) => this.handleStart(e);
-                const move = (e) => this.handleMove(e);
-                const end = (e) => this.handleEnd(e);
-
-                this.container.addEventListener('mousedown', start);
-                this.container.addEventListener('mousemove', move);
-                window.addEventListener('mouseup', end);
-
-                // Touch events with stopPropagation for better mobile control
-                this.container.addEventListener('touchstart', (e) => {
-                    if (e.target === this.textInput || e.target === this.textConfirm) return;
-                    e.preventDefault(); start(e);
-                }, { passive: false });
-
-                this.container.addEventListener('touchmove', (e) => {
-                    if (e.target === this.textInput || e.target === this.textConfirm) return;
-                    e.preventDefault(); move(e);
-                }, { passive: false });
-
-                this.container.addEventListener('touchend', (e) => {
-                    if (e.target === this.textInput || e.target === this.textConfirm) return;
-                    e.preventDefault(); end(e);
-                }, { passive: false });
-
-                // Text Input Handling
-                this.textConfirm.onclick = (e) => { e.stopPropagation(); this.finishText(); };
-                this.textInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') { this.finishText(); }
-                    if (e.key === 'Escape') { this.cancelText(); }
+                const release = event => { this.pointers.delete(event.pointerId); this.distance = this.pinchDistance(); };
+                this.viewport.addEventListener('pointerup', release); this.viewport.addEventListener('pointercancel', release);
+                this.dialog.addEventListener('keydown', event => {
+                    if (event.key === '+' || event.key === '=') this.zoom(this.scale + .5);
+                    if (event.key === '-') this.zoom(this.scale - .5);
+                    const moves = { ArrowLeft: [40,0], ArrowRight: [-40,0], ArrowUp: [0,40], ArrowDown: [0,-40] };
+                    if (moves[event.key]) { event.preventDefault(); this.x += moves[event.key][0]; this.y += moves[event.key][1]; this.paint(); }
                 });
-
-                window.addEventListener('resize', () => {
-                    if (this.currentBoardId && getComputedStyle(this.modal).display !== 'none') {
-                        this.resizeCanvas();
-                    }
+                new ResizeObserver(() => this.paint()).observe(this.viewport);
+            }
+            pinchDistance() { const [a,b] = [...this.pointers.values()]; return b ? Math.hypot(a.x-b.x,a.y-b.y) : 0; }
+            zoom(value) { this.scale = Math.max(1,Math.min(5,value)); if (this.scale === 1) this.x = this.y = 0; this.paint(); }
+            paint() {
+                if (!this.dialog.open) return;
+                const w = this.viewport.clientWidth, h = this.viewport.clientHeight;
+                const ratio = (this.video.videoWidth || 16) / (this.video.videoHeight || 9);
+                const bw = Math.min(w,h*ratio), bh = bw/ratio;
+                const mx = Math.max(0,(bw*this.scale-w)/2), my = Math.max(0,(bh*this.scale-h)/2);
+                this.x = Math.max(-mx,Math.min(mx,this.x)); this.y = Math.max(-my,Math.min(my,this.y));
+                this.video.style.transform = `translate(${this.x}px,${this.y}px) scale(${this.scale})`;
+                document.getElementById('viewerZoom').textContent = `${Math.round(this.scale*100)}%`;
+                document.getElementById('viewerOut').disabled = this.scale === 1;
+                document.getElementById('viewerIn').disabled = this.scale === 5;
+            }
+            open(tile) {
+                this.tileId = tile.id; this.scale = 1; this.x = this.y = 0;
+                this.video.srcObject = tile.querySelector('video').srcObject;
+                document.getElementById('viewerTitle').textContent = tile.querySelector('.video-name').textContent;
+                if (!this.dialog.open) this.dialog.showModal();
+                this.refresh(); this.paint();
+            }
+            refresh() {
+                if (!this.dialog.open) return;
+                const tile = document.getElementById(this.tileId);
+                if (!tile) { this.dialog.close(); return; }
+                if (this.video.srcObject !== tile.querySelector('video').srcObject) this.video.srcObject = tile.querySelector('video').srcObject;
+                const rail = document.getElementById('viewerCameras'); rail.replaceChildren();
+                document.querySelectorAll('#cameraStrip .video-element').forEach(camera => {
+                    const peek = document.createElement('div'); peek.className = 'viewer-peek';
+                    const video = document.createElement('video'); video.autoplay = true; video.playsInline = true; video.muted = true;
+                    const live = camera.dataset.cameraOn === 'true' && !!camera.querySelector('video').srcObject;
+                    if (live) video.srcObject = camera.querySelector('video').srcObject;
+                    const avatar = document.createElement('div'); avatar.className = 'viewer-camera-off'; avatar.textContent = camera.querySelector('.avatar-circle').textContent; avatar.hidden = live;
+                    const name = document.createElement('span'); name.textContent = camera.querySelector('.video-name').textContent;
+                    peek.append(video,avatar,name); rail.append(peek);
                 });
-            }
-
-            setupSocket() {
-                // Wait for room-joined before using the room ID
-                this.socket.on('room-joined', () => {
-                    this.socket.emit('wb-get-state', { roomId: sessionStorage.getItem('currentRoom') });
-                });
-
-                // Fallback for reconnection
-                this.socket.on('connect', () => {
-                    if (sessionStorage.getItem('currentRoom')) {
-                        this.socket.emit('wb-get-state', { roomId: sessionStorage.getItem('currentRoom') });
-                    }
-                });
-
-                this.socket.on('wb-get-state', () => { if (this.boards.length > 0) this.socket.emit('wb-send-state', { roomId: sessionStorage.getItem('currentRoom'), boards: this.boards }); });
-
-                this.socket.on('wb-send-state', (data) => {
-                    let changed = false;
-                    let currentBoardUpdated = false;
-
-                    data.boards.forEach(remoteBoard => {
-                        const localBoard = this.boards.find(b => b.id === remoteBoard.id);
-                        if (!localBoard) {
-                            this.boards.push(remoteBoard);
-                            changed = true;
-                        } else {
-                            // Use the longer remote board state
-                            if (remoteBoard.data && remoteBoard.data.length > localBoard.data.length) {
-                                localBoard.data = remoteBoard.data;
-                                if (this.currentBoardId === localBoard.id) currentBoardUpdated = true;
-                            }
-                        }
-                    });
-                    if (changed && this.listView.style.display !== 'none') this.renderList();
-                    if (currentBoardUpdated) this.redrawCanvas();
-                });
-
-                this.socket.on('wb-create', (board) => { this.boards.push(board); this.notify(); this.renderList(); });
-                this.socket.on('wb-draw', ({ boardId, data }) => {
-                    const board = this.boards.find(b => b.id === boardId);
-                    if (board) {
-                        board.data.push(data);
-                        if (this.currentBoardId === boardId) this.drawItem(data);
-                        else this.notify();
-                    }
-                });
-                this.socket.on('wb-delete', (boardId) => {
-                    this.boards = this.boards.filter(b => b.id !== boardId);
-                    if (this.currentBoardId === boardId) document.getElementById('backToBoards').click();
-                    this.renderList();
-                });
-                this.socket.on('wb-undo-redo', ({ boardId, data }) => {
-                    const board = this.boards.find(b => b.id === boardId);
-                    if (board) { board.data = data; if (this.currentBoardId === boardId) this.redrawCanvas(); }
-                });
-            }
-
-            createBoard() {
-                const id = 'board-' + Math.random().toString(36).substr(2, 9);
-                const myBoardsCount = this.boards.filter(b => b.owner === this.myName).length + 1;
-                const name = `Board ${myBoardsCount} by ${this.myName}`;
-                const newBoard = { id, name, owner: this.myName, data: [] };
-                this.boards.push(newBoard);
-                this.socket.emit('wb-create', { roomId: sessionStorage.getItem('currentRoom'), ...newBoard });
-                this.openBoard(id);
-            }
-
-            openBoard(id) {
-                this.currentBoardId = id;
-                const board = this.boards.find(b => b.id === id);
-                if (!board) return;
-                document.getElementById('boardHeaderTitle').textContent = board.name.toUpperCase();
-                this.listView.style.display = 'none';
-                this.drawView.style.display = 'flex';
-                this.resizeCanvas();
-            }
-
-            deleteBoard(e, id) {
-                e.stopPropagation();
-                if (confirm('Delete this whiteboard for everyone?')) {
-                    this.boards = this.boards.filter(b => b.id !== id);
-                    this.socket.emit('wb-delete', { roomId: sessionStorage.getItem('currentRoom'), boardId: id });
-                    this.renderList();
-                }
-            }
-
-            renderList() {
-                this.listContainer.innerHTML = '';
-                this.boards.forEach(b => {
-                    const div = document.createElement('div');
-                    div.className = 'board-item';
-                    const details = document.createElement('div');
-                    details.style.overflow = 'hidden';
-                    const title = document.createElement('div');
-                    title.style.cssText = 'font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-                    title.textContent = b.name;
-                    const owner = document.createElement('div');
-                    owner.className = 'board-item-meta';
-                    owner.textContent = `Created by ${b.owner}`;
-                    details.append(title, owner);
-                    div.appendChild(details);
-                    const delBtn = document.createElement('button');
-                    delBtn.className = 'delete-board-btn';
-                    delBtn.innerHTML = '🗑️';
-                    delBtn.onclick = (e) => this.deleteBoard(e, b.id);
-                    div.onclick = () => this.openBoard(b.id);
-                    div.appendChild(delBtn);
-                    this.listContainer.appendChild(div);
-                });
-            }
-
-            resizeCanvas() {
-                if (!this.container.offsetWidth) return;
-                this.canvas.width = this.container.offsetWidth;
-                this.canvas.height = this.container.offsetHeight;
-                if (this.currentBoardId) this.redrawCanvas();
-            }
-
-            getPointerPos(e) {
-                const rect = this.canvas.getBoundingClientRect();
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                return { x: clientX - rect.left, y: clientY - rect.top };
-            }
-
-            handleStart(e) {
-                if (!this.currentBoardId) return;
-                const pos = this.getPointerPos(e);
-
-                if (this.tool === 'text') {
-                    if (!this.isTyping) {
-                        this.startText(pos.x, pos.y);
-                    }
-                    return;
-                }
-
-                this.isDrawing = true;
-                this.lastX = pos.x;
-                this.lastY = pos.y;
-
-                this.currentStroke = {
-                    type: 'line',
-                    points: [{ x: this.lastX / this.canvas.width, y: this.lastY / this.canvas.height }],
-                    color: this.tool === 'eraser' ? '#ffffff' : this.color,
-                    width: this.tool === 'eraser' ? 25 : 3,
-                    isEraser: this.tool === 'eraser'
-                };
-
-                this.ctx.beginPath();
-                this.ctx.arc(this.lastX, this.lastY, this.currentStroke.width / 2, 0, Math.PI * 2);
-                this.ctx.fillStyle = this.currentStroke.color;
-                this.ctx.fill();
-            }
-
-            handleMove(e) {
-                if (!this.isDrawing) return;
-                const pos = this.getPointerPos(e);
-
-                this.ctx.beginPath();
-                this.ctx.moveTo(this.lastX, this.lastY);
-                this.ctx.lineTo(pos.x, pos.y);
-                this.ctx.strokeStyle = this.currentStroke.color;
-                this.ctx.lineWidth = this.currentStroke.width;
-                this.ctx.lineCap = 'round';
-                this.ctx.lineJoin = 'round';
-                if (this.currentStroke.isEraser) this.ctx.globalCompositeOperation = 'destination-out';
-                else this.ctx.globalCompositeOperation = 'source-over';
-
-                this.ctx.stroke();
-                this.ctx.globalCompositeOperation = 'source-over';
-
-                this.currentStroke.points.push({ x: pos.x / this.canvas.width, y: pos.y / this.canvas.height });
-                [this.lastX, this.lastY] = [pos.x, pos.y];
-            }
-
-            handleEnd() {
-                if (!this.isDrawing) return;
-                this.isDrawing = false;
-                if (this.currentStroke.points.length > 0) {
-                    this.pushData(this.currentStroke);
-                }
-            }
-
-            startText(x, y) {
-                this.isTyping = true;
-                this.textX = x;
-                this.textY = y;
-                this.textWrapper.style.display = 'block';
-                this.textWrapper.style.left = Math.min(x, this.canvas.width - 200) + 'px';
-                this.textWrapper.style.top = y + 'px';
-                this.textInput.style.color = this.color;
-                this.textInput.value = '';
-                this.textInput.focus();
-            }
-
-            finishText() {
-                if (!this.isTyping) return;
-                const text = this.textInput.value.trim();
-                if (text) {
-                    const data = {
-                        type: 'text',
-                        x: this.textX / this.canvas.width,
-                        y: this.textY / this.canvas.height,
-                        text: text,
-                        color: this.color,
-                        font: "20px 'Courier Prime'"
-                    };
-                    this.pushData(data);
-                    this.drawTextLocal(data);
-                }
-                this.cancelText();
-            }
-
-            cancelText() {
-                this.isTyping = false;
-                this.textWrapper.style.display = 'none';
-                this.textInput.value = '';
-            }
-
-            drawTextLocal(data) {
-                const x = data.x * this.canvas.width;
-                const y = data.y * this.canvas.height;
-                this.ctx.font = data.font || "20px 'Courier Prime'";
-                this.ctx.fillStyle = data.color;
-                this.ctx.textBaseline = 'top';
-                this.ctx.fillText(data.text, x, y);
-            }
-
-            pushData(data) {
-                const board = this.boards.find(b => b.id === this.currentBoardId);
-                if (board) {
-                    board.data.push(data);
-                    this.socket.emit('wb-draw', {
-                        roomId: sessionStorage.getItem('currentRoom'),
-                        boardId: this.currentBoardId,
-                        data: data
-                    });
-                    if (!this.undoStack[this.currentBoardId]) this.undoStack[this.currentBoardId] = [];
-                    this.undoStack[this.currentBoardId].push([...board.data]);
-                }
-            }
-
-            drawItem(item) {
-                if (item.type === 'text') {
-                    this.drawTextLocal(item);
-                } else {
-                    if (item.points.length < 1) return;
-                    const w = this.canvas.width;
-                    const h = this.canvas.height;
-
-                    this.ctx.beginPath();
-                    this.ctx.lineCap = 'round';
-                    this.ctx.lineJoin = 'round';
-                    this.ctx.strokeStyle = item.color;
-                    this.ctx.lineWidth = item.width;
-
-                    if (item.isEraser) this.ctx.globalCompositeOperation = 'destination-out';
-                    else this.ctx.globalCompositeOperation = 'source-over';
-
-                    if (item.points.length === 1) {
-                        this.ctx.arc(item.points[0].x * w, item.points[0].y * h, item.width / 2, 0, Math.PI * 2);
-                        this.ctx.fillStyle = item.color;
-                        this.ctx.fill();
-                    } else {
-                        this.ctx.moveTo(item.points[0].x * w, item.points[0].y * h);
-                        for (let i = 1; i < item.points.length; i++) {
-                            this.ctx.lineTo(item.points[i].x * w, item.points[i].y * h);
-                        }
-                        this.ctx.stroke();
-                    }
-                    this.ctx.globalCompositeOperation = 'source-over';
-                }
-            }
-
-            redrawCanvas() {
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                const board = this.boards.find(b => b.id === this.currentBoardId);
-                if (board) {
-                    board.data.forEach(item => this.drawItem(item));
-                }
-            }
-
-            undo() {
-                const board = this.boards.find(b => b.id === this.currentBoardId);
-                if (board && board.data.length > 0) {
-                    if (!this.redoStack[this.currentBoardId]) this.redoStack[this.currentBoardId] = [];
-                    this.redoStack[this.currentBoardId].push(board.data.pop());
-                    this.redrawCanvas();
-                    this.syncUndoRedo(board);
-                }
-            }
-
-            redo() {
-                if (this.redoStack[this.currentBoardId] && this.redoStack[this.currentBoardId].length > 0) {
-                    const board = this.boards.find(b => b.id === this.currentBoardId);
-                    board.data.push(this.redoStack[this.currentBoardId].pop());
-                    this.redrawCanvas();
-                    this.syncUndoRedo(board);
-                }
-            }
-
-            syncUndoRedo(board) {
-                this.socket.emit('wb-undo-redo', {
-                    roomId: sessionStorage.getItem('currentRoom'),
-                    boardId: this.currentBoardId,
-                    data: board.data
-                });
-            }
-
-            notify() {
-                if (getComputedStyle(this.modal).display === 'none') {
-                    this.btn.classList.add('has-notif');
-                    UI.showToast("📝 Whiteboard activity");
-                }
             }
         }
 
@@ -2136,6 +204,8 @@
                 const savedLevel = sessionStorage.getItem('userLevel');
                 this.userLevel = legacyLevels[savedLevel] || savedLevel;
                 this.userId = sessionStorage.getItem('userId') || `user-${Date.now()}`;
+                this.memberToken = sessionStorage.getItem('kerneMemberToken') || crypto.randomUUID();
+                sessionStorage.setItem('kerneMemberToken', this.memberToken);
 
                 this.isCamOn = sessionStorage.getItem('isCamOn') !== 'false';
                 this.isMicOn = sessionStorage.getItem('isMicOn') !== 'false';
@@ -2164,10 +234,10 @@
                 if (!mediaReady) mediaPromise.then(() => {
                     if (this.peers.size) this.restartTransport('Media enabled: reconnecting…');
                 });
-                document.getElementById('roomInfo').textContent = 'Serveur...';
+                document.getElementById('roomInfo').textContent = 'Connecting to room...';
                 this.socket = new SignalingSocket(window.KERNE_SIGNAL_URL);
                 this.setupSocketEvents();
-                this.wb = new WhiteboardManager(this.socket, this.userId);
+                this.activities = new Activities(this);
                 this.socket.connect();
                 window.addEventListener('online', () => this.restartTransport());
                 navigator.connection?.addEventListener?.('change', () => this.restartTransport());
@@ -2212,6 +282,12 @@
                         old.stop();
                     }
                     this.localStream.addTrack(track);
+                    if (kind === 'video') track.onended = () => {
+                        if (!this.localStream?.getVideoTracks().includes(track)) return;
+                        this.isCamOn = false;
+                        UI.updateLocalCameraUI(false);
+                        this.socket?.emit('state-change', { roomId: this.currentRoom, state: { cam: false } });
+                    };
                     this.hasMediaPermissions[kind] = true;
                     this.mediaErrors[kind] = false;
                     const enabled = reconnect || (kind === 'video' ? this.isCamOn : this.isMicOn);
@@ -2312,7 +388,7 @@
 
             toggleSound() {
                 this.isSoundOn = !this.isSoundOn; sessionStorage.setItem('isSoundOn', this.isSoundOn);
-                document.querySelectorAll('video').forEach(v => {
+                document.querySelectorAll('.video-element > video').forEach(v => {
                     if (v.closest('.video-element').id !== `video-${this.mySocketId}`) v.muted = !this.isSoundOn;
                 });
                 UI.updateSoundUI(this.isSoundOn);
@@ -2335,6 +411,7 @@
                     if ('contentHint' in screenTrack) screenTrack.contentHint = 'detail';
                     screenTrack.addEventListener('ended', () => this.stopScreenShare(), { once: true });
                     document.getElementById('screenShareBtn').classList.add('active');
+                    document.getElementById('shareScreenMenu').textContent = 'Stop sharing';
                     UI.addScreenVideo(this.mySocketId, stream, 'My screen', true);
                     this.socket?.emit('screen-share-started', { streamId: stream.id });
                     for (const peer of this.peers.values()) { peer.addStream(stream); this.optimizeScreenSender(peer); }
@@ -2354,6 +431,7 @@
                 this.socket?.emit('screen-share-stopped', {});
                 UI.removeScreenVideo(this.mySocketId);
                 document.getElementById('screenShareBtn').classList.remove('active');
+                document.getElementById('shareScreenMenu').textContent = 'Share screen';
             }
 
             async optimizeScreenSender(peer) {
@@ -2373,10 +451,11 @@
                     this.mySocketId = this.socket.id;
                     this.iceReady = false;
                     UI.updateLocalCameraUI(this.isCamOn);
-                    this.socket.emit('join-room', { name: this.userName, level: this.userLevel, peerId: this.socket.id, userId: this.userId, privateRoomCode: this.privateRoomCode });
+                    this.socket.emit('join-room', { name: this.userName, level: this.userLevel, peerId: this.socket.id, memberToken: this.memberToken, resumeRoom: this.currentRoom, privateRoomCode: this.privateRoomCode });
                 });
                 this.socket.on('room-joined', ({ roomId, users, userStates, screenShares }) => {
                     this.currentRoom = roomId; sessionStorage.setItem('currentRoom', roomId);
+                    this.userId = users.find(u => u.socketId === this.mySocketId)?.userId || this.userId;
                     this.remoteScreens = new Map((screenShares || []).map(s => [s.peerId, s.streamId]));
                     this.userInfo.set(this.mySocketId, { name: this.userName, level: this.userLevel });
                     UI.addVideo(this.mySocketId, this.localStream, this.userName, this.userLevel, true);
@@ -2431,8 +510,7 @@
                     this.remoteScreens.clear();
                     this.peerStreams.clear();
                     if (this.mySocketId) { this.userInfo.delete(this.mySocketId); UI.removeVideo(this.mySocketId); }
-                    this.currentRoom = null;
-                    sessionStorage.removeItem('currentRoom');
+                    // Keep the room hint for an authenticated game reconnect.
                 });
                 this.socket.on('chat-message', ({ from, message }) => UI.addChatMessage(from, message, from === this.userName));
 
@@ -2509,6 +587,27 @@
             constructor() {
                 this.videoGrid = document.getElementById('videoGrid');
                 this.participantsList = document.getElementById('participantsList');
+                this.cameraStrip = document.getElementById('cameraStrip');
+                this.screenStage = document.getElementById('screenStage');
+                this.viewer = new ScreenViewer();
+                const more = document.createElement('details'); more.className = 'room-more'; more.id = 'roomMore';
+                more.innerHTML = `<summary aria-label="More call controls" title="More call controls">•••</summary><div class="room-more-menu"><button class="mobile-only" id="shareScreenMenu">Share screen</button><button data-device-menu="camMenu">Camera device</button><button data-device-menu="micMenu">Microphone device</button><button data-device-menu="soundMenu">Audio output</button></div>`;
+                document.querySelector('.controls').insertBefore(more, document.getElementById('leaveBtn'));
+                const sound = document.querySelector('.sound-control-wrapper');
+                const soundLabel = document.createElement('span'); soundLabel.className = 'sound-label'; soundLabel.textContent = 'Call sound';
+                sound.append(soundLabel); more.querySelector('.room-more-menu').append(sound);
+                document.getElementById('shareScreenMenu').onclick = () => { more.open = false; manager.toggleScreenShare(); };
+                more.querySelectorAll('[data-device-menu]').forEach(button => button.onclick = () => {
+                    const menu = document.getElementById(button.dataset.deviceMenu);
+                    more.open = menu.id === 'soundMenu';
+                    document.querySelectorAll('.device-menu,.sound-device-menu').forEach(other => other.classList.remove('show'));
+                    requestAnimationFrame(() => menu.classList.add('show'));
+                });
+                document.addEventListener('click', event => { if (!more.contains(event.target)) more.open = false; });
+                const back = document.createElement('button'); back.className = 'sidebar-close'; back.textContent = '← Back to call'; back.onclick = () => document.getElementById('sidebarOverlay').click();
+                document.getElementById('sidebar').prepend(back);
+                document.querySelectorAll('.control-btn').forEach(button => { if (button.title) button.setAttribute('aria-label',button.title); });
+                new ResizeObserver(() => this.resizeGrid()).observe(this.videoGrid);
             }
 
             addVideo(peerId, stream, name, level, isLocal) {
@@ -2532,25 +631,33 @@
                 c.querySelector('.video-name').textContent = `${name} (${level})`;
                 c.insertBefore(v, c.firstChild);
                 c.querySelector('.fullscreen-btn').onclick = (e) => { e.stopPropagation(); this.toggleFullscreen(peerId); };
-                this.videoGrid.appendChild(c); this.resizeGrid();
+                c.querySelector('.fullscreen-btn').setAttribute('aria-label',`Focus ${name || 'camera'}`);
+                this.cameraStrip.appendChild(c); this.setCameraVisibility(c, isLocal ? manager.isCamOn : false); this.resizeGrid();
+            }
+
+            setCameraVisibility(tile, enabled) {
+                tile.dataset.cameraOn = String(enabled);
+                tile.querySelector('video').style.display = enabled && tile.querySelector('video').srcObject ? 'block' : 'none';
+                tile.querySelector('.video-avatar').style.display = enabled && tile.querySelector('video').srcObject ? 'none' : 'flex';
+                manager.activities?.refreshCameras();
+                this.viewer.refresh();
             }
 
             attachStream(peerId, stream) {
                 const c = document.getElementById(`video-${peerId}`); if (!c) return;
                 c.querySelector('video').srcObject = stream;
-                c.querySelector('video').style.display = 'block';
-                c.querySelector('.video-avatar').style.display = 'none';
+                this.setCameraVisibility(c, c.dataset.cameraOn === 'true');
             }
 
             clearStream(peerId) {
                 const c = document.getElementById(`video-${peerId}`); if (!c) return;
                 c.querySelector('video').srcObject = null;
-                c.querySelector('video').style.display = 'none';
-                c.querySelector('.video-avatar').style.display = 'flex';
+                this.setCameraVisibility(c, c.dataset.cameraOn === 'true');
             }
 
             addScreenVideo(peerId, stream, label, isLocal = false) {
-                if (document.getElementById(`screen-${peerId}`)) return;
+                const existing = document.getElementById(`screen-${peerId}`);
+                if (existing) { existing.querySelector('video').srcObject = stream; return; }
                 const tile = document.createElement('div');
                 tile.className = 'video-element screen-share';
                 tile.id = `screen-${peerId}`;
@@ -2567,11 +674,11 @@
                 overlay.appendChild(name);
                 const zoom = document.createElement('button');
                 zoom.className = 'fullscreen-btn';
-                zoom.textContent = '⛶';
-                zoom.title = 'Expand or shrink screen share';
+                zoom.textContent = 'Full view ⛶';
+                zoom.title = 'Open shared screen with zoom'; zoom.setAttribute('aria-label',zoom.title);
                 zoom.onclick = event => { event.stopPropagation(); this.toggleFullscreenElement(tile.id); };
                 tile.append(video, overlay, zoom);
-                this.videoGrid.prepend(tile);
+                this.screenStage.appendChild(tile);
                 this.resizeGrid();
             }
 
@@ -2580,16 +687,17 @@
                 this.resizeGrid();
             }
 
-            removeVideo(peerId) { const el = document.getElementById(`video-${peerId}`); if (el) el.remove(); this.resizeGrid(); }
+            removeVideo(peerId) {
+                const el = document.getElementById(`video-${peerId}`);
+                if (el?.classList.contains('fullscreen-active')) this.videoGrid.classList.remove('fullscreen-mode');
+                el?.remove(); this.resizeGrid(); manager.activities?.refreshCameras();
+            }
 
             updateLocalCameraUI(isOn) {
                 const btn = document.getElementById('camBtn');
                 btn.classList.toggle('active', isOn); btn.classList.toggle('inactive', !isOn);
                 const local = document.getElementById(`video-${manager.mySocketId}`);
-                if (local) {
-                    local.querySelector('video').style.display = isOn ? 'block' : 'none';
-                    local.querySelector('.video-avatar').style.display = isOn ? 'none' : 'flex';
-                }
+                if (local) this.setCameraVisibility(local, isOn);
             }
 
             updateLocalMicUI(isOn) {
@@ -2607,10 +715,7 @@
             updatePeerState(peerId, state) {
                 const c = document.getElementById(`video-${peerId}`); if (!c) return;
 
-                if (state.cam !== undefined) {
-                    c.querySelector('video').style.display = state.cam ? 'block' : 'none';
-                    c.querySelector('.video-avatar').style.display = state.cam ? 'none' : 'flex';
-                }
+                if (state.cam !== undefined) this.setCameraVisibility(c, state.cam);
 
                 if (state.mic !== undefined) {
                     c.classList.toggle('mic-off', !state.mic);
@@ -2626,7 +731,9 @@
             }
 
             toggleFullscreenElement(elementId) {
-                const grid = document.getElementById('videoGrid');
+                const grid = this.videoGrid;
+                const tile = document.getElementById(elementId);
+                if (tile?.classList.contains('screen-share')) { this.viewer.open(tile); return; }
                 if (grid.classList.contains('fullscreen-mode')) {
                     grid.classList.remove('fullscreen-mode');
                     document.querySelectorAll('.fullscreen-active').forEach(e => e.classList.remove('fullscreen-active'));
@@ -2673,20 +780,21 @@
                 const sharing = vids.some(v => v.classList.contains('screen-share'));
                 this.videoGrid.classList.toggle('has-screen-share', sharing);
                 document.body.classList.toggle('screen-sharing', sharing);
-                this.videoGrid.style.setProperty('--camera-count', Math.max(1, vids.filter(v => !v.classList.contains('screen-share')).length));
+                this.viewer?.refresh();
                 if (!vids.length) return;
                 if (sharing) { vids.forEach(v => { v.style.width = ''; v.style.height = ''; }); return; }
 
-                const rect = this.videoGrid.getBoundingClientRect();
+                const rect = this.cameraStrip.getBoundingClientRect();
                 const count = vids.length;
 
-                // --- FIX CENTRAGE ---
+                // Fit camera tiles to the available stage
                 // Remove grid padding from available width
-                const padding = 20; // 10px padding on each side
+                const padding = 4;
                 const gap = 10; // Space between videos
 
-                const availW = rect.width - padding;
-                const availH = rect.height - padding;
+                const availW = Math.max(0, rect.width - padding);
+                const availH = Math.max(0, rect.height - padding);
+                const aspect = count === 1 && window.innerWidth <= 600 ? 3 / 4 : 16 / 9;
 
                 let best = { w: 0, h: 0, cols: 1 };
 
@@ -2696,13 +804,13 @@
                     // Maximum video width including gaps
                     let w = (availW - (cols - 1) * gap) / cols;
 
-                    // Calcul hauteur
-                    let h = w / (16 / 9);
+                    // Preserve the chosen aspect ratio
+                    let h = w / aspect;
 
                     // Recalculate if video exceeds available height
                     if (h * rows + (rows - 1) * gap > availH) {
                         h = (availH - (rows - 1) * gap) / rows;
-                        w = h * (16 / 9);
+                        w = h * aspect;
                     }
 
                     if (w > best.w) {
@@ -2744,7 +852,7 @@
         };
         document.getElementById('sidebarToggle').onclick = function () {
             this.classList.remove('has-notif');
-            // Gestion ouverture Sidebar Mobile & Overlay
+            // Mobile sidebar and backdrop
             if (window.innerWidth <= 768) {
                 document.getElementById('sidebar').classList.toggle('mobile-open');
                 document.getElementById('sidebarOverlay').classList.toggle('active');

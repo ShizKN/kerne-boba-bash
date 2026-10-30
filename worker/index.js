@@ -1,23 +1,10 @@
 import { DurableObject } from 'cloudflare:workers';
+import { createGame, act, advance, presence, view, nextDeadline } from './games.js';
 
 const MAX_ROOM_SIZE = 4;
 const LEVELS = new Set(['Middle school', 'High school', 'Preparatory class', 'Undergraduate', "Master's", 'Doctorate']);
 const LEGACY_LEVELS = { 'Collège': 'Middle school', 'Lycée': 'High school', 'Prépa': 'Preparatory class', 'Licence': 'Undergraduate', 'Master': "Master's", 'Doctorat': 'Doctorate' };
 const STUN = [{ urls: 'stun:stun.cloudflare.com:3478' }];
-const MAX_BOARD_BYTES = 500_000;
-
-function validBoardItem(item) {
-    if (!item || typeof item !== 'object') return false;
-    const position = value => Number.isFinite(value) && value >= -1 && value <= 2;
-    const color = value => typeof value === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(value);
-    if (item.type === 'text') return position(item.x) && position(item.y) &&
-        typeof item.text === 'string' && item.text.length <= 500 && color(item.color);
-    if (item.type === 'line') return Array.isArray(item.points) && item.points.length > 0 &&
-        item.points.length <= 600 && item.points.every(point => point && position(point.x) && position(point.y)) &&
-        Number.isFinite(item.width) && item.width >= 1 && item.width <= 50 && color(item.color);
-    return false;
-}
-
 function send(ws, event, data, id) {
     if (ws.readyState !== WebSocket.OPEN) return;
     try { ws.send(JSON.stringify({ event, data, ...(id ? { id } : {}) })); } catch (_) {}
@@ -35,6 +22,74 @@ function isAllowedOrigin(origin) {
 }
 
 export class KerneRooms extends DurableObject {
+    constructor(ctx, env) {
+        super(ctx, env);
+        ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room_games (room TEXT PRIMARY KEY, state TEXT NOT NULL, due INTEGER NOT NULL)');
+    }
+
+    game(room) {
+        const row = this.ctx.storage.sql.exec('SELECT state FROM room_games WHERE room = ?', room).toArray()[0];
+        return row ? JSON.parse(row.state) : null;
+    }
+    saveGame(room, game) {
+        if (!game) this.ctx.storage.sql.exec('DELETE FROM room_games WHERE room = ?', room);
+        else this.ctx.storage.sql.exec('INSERT OR REPLACE INTO room_games (room, state, due) VALUES (?, ?, ?)', room, JSON.stringify(game), Math.min(nextDeadline(game), game.emptyAt ? game.emptyAt + 120_000 : Infinity));
+    }
+    members(room, except) {
+        return this.sockets(room).filter(ws => ws !== except).map(ws => {
+            const p = ws.deserializeAttachment(); return { id: p.userId, name: p.name };
+        });
+    }
+    publishGame(room, game, target) {
+        for (const ws of target ? [target] : this.sockets(room)) {
+            send(ws, 'game-state', { game: game ? view(game, ws.deserializeAttachment().userId) : null, serverNow: Date.now() });
+        }
+    }
+    async scheduleGames() {
+        const row = this.ctx.storage.sql.exec('SELECT MIN(due) AS due FROM room_games').toArray()[0];
+        if (row?.due != null) await this.ctx.storage.setAlarm(Math.max(Date.now() + 25, row.due));
+        else await this.ctx.storage.deleteAlarm();
+    }
+    async alarm() {
+        const now = Date.now();
+        const rows = this.ctx.storage.sql.exec('SELECT room, state FROM room_games WHERE due <= ?', now).toArray();
+        for (const row of rows) {
+            let game = JSON.parse(row.state);
+            if (game.cleanupAt <= now || game.emptyAt && game.emptyAt + 120_000 <= now) game = null;
+            else advance(game, now);
+            this.saveGame(row.room, game); this.publishGame(row.room, game);
+        }
+        await this.scheduleGames();
+    }
+    async gameMessage(ws, state, event, data) {
+        const room = state.roomId, now = Date.now();
+        let game = this.game(room);
+        if (game && (game.cleanupAt <= now || game.phase === 'finished' && !game.players.some(p => p.online && p.active))) { this.saveGame(room, null); game = null; }
+        const info = { id: state.userId, name: state.name };
+        try {
+            if (event === 'game-get') { this.publishGame(room, game, ws); return; }
+            const rate = state.gameRate && now - state.gameRate.at < 1000 ? state.gameRate : { at: now, count: 0 };
+            rate.count++; ws.serializeAttachment({ ...ws.deserializeAttachment(), gameRate: rate });
+            if (rate.count > 24) return;
+            let result = {};
+            if (event === 'game-create') {
+                if (game) { this.publishGame(room, game, ws); throw new Error('A game is already open. Join it from Activities.'); }
+                game = createGame(data.kind, info, { pace: data.pace }, now);
+            } else {
+                if (!game) throw new Error('This game has ended. Open a new one.');
+                result = act(game, info, data.action, data, now);
+                if (result.close) game = null;
+            }
+            if (result.unchanged) return;
+            this.saveGame(room, game);
+            if (result.stroke) this.broadcast(room, 'game-stroke', { gameId: game.id, round: game.round, stroke: result.stroke });
+            else this.publishGame(room, game);
+            if (result.reaction) this.broadcast(room, 'game-reaction', result.reaction);
+            if (result.invite) this.broadcast(room, 'game-invite', { from: state.name, kind: game.kind });
+            await this.scheduleGames();
+        } catch (error) { send(ws, 'game-error', { message: error.message }); }
+    }
+
     async fetch(request) {
         if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
             return new Response('WebSocket required', { status: 426 });
@@ -63,10 +118,10 @@ export class KerneRooms extends DurableObject {
         try { message = JSON.parse(raw); } catch (_) { return; }
         const { event, data = {}, id } = message || {};
         const state = ws.deserializeAttachment();
-        if (!state || typeof event !== 'string') return;
+        if (!state || typeof event !== 'string' || !data || typeof data !== 'object' || Array.isArray(data)) return;
 
         if (event === 'join-room') {
-            if (state.roomId) return;
+            if (state.roomId || state.joining) return;
             const { name, level, privateRoomCode } = data || {};
             const normalizedLevel = LEGACY_LEVELS[level] || level;
             if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 20 ||
@@ -78,8 +133,16 @@ export class KerneRooms extends DurableObject {
                 send(ws, 'error', { message: 'Invalid room code' });
                 return;
             }
+            ws.serializeAttachment({ ...state, joining: true });
+            const token = typeof data.memberToken === 'string' && /^[a-f0-9-]{32,80}$/i.test(data.memberToken) ? data.memberToken : state.socketId;
+            const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+            const userId = [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2,'0')).join('');
+            if (ws.readyState !== WebSocket.OPEN) return;
             let roomId;
-            if (privateRoomCode) roomId = `private-${privateRoomCode}`;
+            const resume = typeof data.resumeRoom === 'string' && /^public-[a-f0-9-]{36}$/.test(data.resumeRoom) ? data.resumeRoom : null;
+            const priorGame = resume ? this.game(resume) : null;
+            if (!privateRoomCode && priorGame?.players.some(p => p.id === userId && p.active)) roomId = resume;
+            else if (privateRoomCode) roomId = `private-${privateRoomCode}`;
             else {
                 const counts = new Map();
                 for (const peer of this.ctx.getWebSockets()) {
@@ -90,12 +153,13 @@ export class KerneRooms extends DurableObject {
             }
             const existing = this.sockets(roomId);
             if (existing.length >= MAX_ROOM_SIZE) {
+                ws.serializeAttachment({ ...state, joining: false });
                 send(ws, 'error', { message: 'The room is full' });
                 return;
             }
             const user = {
                 socketId: state.socketId, peerId: state.socketId,
-                userId: typeof data.userId === 'string' ? data.userId.slice(0, 80) : state.socketId,
+                userId,
                 name: name.trim(), level: normalizedLevel, joinedAt: Date.now()
             };
             ws.serializeAttachment({ ...state, ...user, roomId, mediaState: { cam: true } });
@@ -111,10 +175,16 @@ export class KerneRooms extends DurableObject {
                 .map(p => ({ peerId: p.socketId, streamId: p.screenStreamId }));
             send(ws, 'room-joined', { roomId, users, yourPeerId: state.socketId, userStates, screenShares });
             this.broadcast(roomId, 'user-joined', user, ws);
+            let game = this.game(roomId);
+            if (game?.emptyAt && !game.players.some(p => p.id === userId)) game = null;
+            if (game) { delete game.emptyAt; presence(game, this.members(roomId)); }
+            this.saveGame(roomId, game); this.publishGame(roomId, game);
+            await this.scheduleGames();
             return;
         }
 
         if (!state.roomId) return;
+        if (['game-get','game-create','game-action'].includes(event)) { await this.gameMessage(ws, state, event, data); return; }
         if (event === 'request-ice-servers') {
             const ice = await this.iceServers(ws, state);
             send(ws, 'ack', ice, id);
@@ -155,38 +225,6 @@ export class KerneRooms extends DurableObject {
             this.broadcast(state.roomId, 'screen-share-stopped', { peerId: state.socketId }, ws);
             return;
         }
-        if (event.startsWith('wb-') && data?.roomId === state.roomId) {
-            const key = `boards:${state.roomId}`;
-            const boards = (await this.ctx.storage.get(key)) || [];
-            if (event === 'wb-get-state') {
-                send(ws, 'wb-send-state', { boards });
-                return;
-            }
-            if (event === 'wb-create') {
-                if (boards.length >= 20 || typeof data.id !== 'string' || !/^[\w-]{1,80}$/.test(data.id) || boards.some(b => b.id === data.id)) return;
-                const board = { id: data.id, name: String(data.name || 'Whiteboard').slice(0, 80), owner: state.name, data: [] };
-                boards.push(board);
-                await this.ctx.storage.put(key, boards);
-                this.broadcast(state.roomId, 'wb-create', board, ws);
-                return;
-            }
-            const board = boards.find(b => b.id === data.boardId);
-            if (!board) return;
-            if (event === 'wb-draw' && validBoardItem(data.data) && board.data.length < 2000) {
-                board.data.push(data.data);
-                if (JSON.stringify(boards).length > MAX_BOARD_BYTES) return;
-                await this.ctx.storage.put(key, boards);
-                this.broadcast(state.roomId, 'wb-draw', { boardId: board.id, data: data.data }, ws);
-            } else if (event === 'wb-undo-redo' && Array.isArray(data.data) && data.data.length <= 2000 && data.data.every(validBoardItem)) {
-                board.data = data.data;
-                if (JSON.stringify(boards).length > MAX_BOARD_BYTES) return;
-                await this.ctx.storage.put(key, boards);
-                this.broadcast(state.roomId, 'wb-undo-redo', { boardId: board.id, data: board.data }, ws);
-            } else if (event === 'wb-delete') {
-                await this.ctx.storage.put(key, boards.filter(b => b.id !== board.id));
-                this.broadcast(state.roomId, 'wb-delete', board.id, ws);
-            }
-        }
     }
 
     async iceServers(ws, state) {
@@ -208,7 +246,7 @@ export class KerneRooms extends DurableObject {
                 result = { iceServers: body.iceServers, turnEnabled: true };
             } catch (error) { console.error('Cloudflare TURN unavailable', error.message); }
         }
-        ws.serializeAttachment({ ...state, cachedIce: result, iceExpiresAt: now + 60 * 60 * 1000 });
+        ws.serializeAttachment({ ...ws.deserializeAttachment(), cachedIce: result, iceExpiresAt: now + 60 * 60 * 1000 });
         return result;
     }
 
@@ -218,8 +256,13 @@ export class KerneRooms extends DurableObject {
             this.broadcast(state.roomId, 'user-left', {
                 socketId: state.socketId, peerId: state.socketId, userId: state.userId
             }, ws);
-            if (!this.sockets(state.roomId).some(peer => peer !== ws)) {
-                await this.ctx.storage.delete(`boards:${state.roomId}`);
+            const game = this.game(state.roomId);
+            if (game) {
+                const members = this.members(state.roomId, ws);
+                presence(game, members);
+                if (!members.length) game.emptyAt = Date.now();
+                this.saveGame(state.roomId, game); this.publishGame(state.roomId, game);
+                await this.scheduleGames();
             }
         }
         try { ws.close(code, reason); } catch (_) {}
