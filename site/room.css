@@ -1146,11 +1146,17 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .a-block-combo { min-width: 92px; text-align: center; font: bold 42px 'Oswald',sans-serif; color: #a04b24; transform: rotate(5deg); }
 .a-block-combo small { display: block; font: bold 9px 'Courier Prime',monospace; letter-spacing: 2px; }
 .a-block-arena { display: grid; grid-template-columns: minmax(0,1fr) 150px; align-items: start; gap: 20px; }
-.a-block-board { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: clamp(4px,1vw,9px); padding: clamp(8px,2vw,18px); border: 3px solid #19251f; border-radius: 10px; background: radial-gradient(circle at 50% 20%,#557067,#203e38 70%); box-shadow: 7px 8px 0 #15231e, inset 0 3px 18px #071d1888; touch-action: manipulation; }
+.a-block-board { display: grid; position:relative; grid-template-columns: repeat(6,minmax(0,1fr)); gap: clamp(4px,1vw,9px); padding: clamp(8px,2vw,18px); border: 3px solid #19251f; border-radius: 10px; background: radial-gradient(circle at 50% 20%,#557067,#203e38 70%); box-shadow: 7px 8px 0 #15231e, inset 0 3px 18px #071d1888; touch-action: manipulation; perspective: 650px; }
 .a-cube { aspect-ratio: 1; min-width: 0; border: 2px solid #17221d; border-radius: 7px; position: relative; background: var(--cube); box-shadow: inset -4px -5px 0 #0004, inset 3px 3px 0 #fff8, 0 5px 0 var(--shadow), 0 8px 1px #0007; transition: transform .1s,box-shadow .1s; cursor: pointer; }
 .a-cube:hover,.a-cube:focus-visible { transform: translateY(-3px); box-shadow: inset -4px -5px 0 #0004, inset 3px 3px 0 #fff8,0 8px 0 var(--shadow),0 11px 3px #0008; }
 .a-cube:active { transform: translateY(4px); box-shadow: inset -3px -3px 0 #0004,0 1px 0 var(--shadow); }
 .a-cube span { position: absolute; inset: 27%; border: 2px solid #fff9; border-radius: 3px; transform: rotate(45deg); opacity: .55; }
+.a-cube::before { content:''; position:absolute; inset:4px 8px auto 4px; height:15%; background:#fff6; clip-path:polygon(0 0,100% 0,80% 100%,10% 100%); border-radius:3px; }
+.a-cube::after { content:''; position:absolute; inset:6px 3px 6px auto; width:10%; background:#0002; transform:skewY(-20deg); border-radius:2px; }
+.a-block-burst { position:absolute; z-index:4; pointer-events:none; transform:translate(-50%,-50%); color:#fff5bc; text-shadow:2px 2px 0 #1c2620,0 0 8px #000; font:bold clamp(18px,3vw,30px) 'Oswald',sans-serif; white-space:nowrap; animation:blockBurst .85s ease-out forwards; }
+.a-block-board.pop-shake { animation:blockShake .28s ease-out; }
+@keyframes blockBurst { 0%{opacity:0;transform:translate(-50%,-30%) scale(.5)}25%{opacity:1;transform:translate(-50%,-100%) scale(1.2)}100%{opacity:0;transform:translate(-50%,-220%) scale(1)} }
+@keyframes blockShake { 0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}60%{transform:translateX(3px)} }
 .a-cube.c0 { --cube:#f07769;--shadow:#9e3e35; }.a-cube.c1 { --cube:#f6cf5a;--shadow:#a58127; }.a-cube.c2 { --cube:#70c9a0;--shadow:#357e5d; }.a-cube.c3 { --cube:#6ebce8;--shadow:#376e96; }.a-cube.c4 { --cube:#b48de4;--shadow:#70499b; }
 .a-block-rivals { border: 2px solid #18251e; border-radius: 5px; padding: 12px; background: #e4ecdd; box-shadow: 3px 3px 0 #18251e; font-size: 11px; }
 .a-block-rivals strong { font-size: 10px; letter-spacing: 1px; }.a-block-rivals div div { display:flex;justify-content:space-between;gap:6px;padding:9px 0;border-bottom:1px dashed #1d322c66; }.a-block-rivals p { font-size: 10px;line-height:1.4; }

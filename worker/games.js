@@ -80,7 +80,7 @@ function popBlocks(game,p,index,now) {
     p.lastBlockAt=now;p.combo=combo;award(p,points);
     if(combo>=4)badge(p,'Combo king');
     if(group.length>=10)badge(p,'Meteor magnet');
-    game.blockLast={playerId:p.id,size:group.length,points,combo,at:now};
+    game.blockLast={playerId:p.id,index,size:group.length,points,combo,at:now};
     feed(game,`${p.name} popped ${group.length} blocks${combo>1?` · ×${combo} combo`:''}!`,'correct');
 }
 

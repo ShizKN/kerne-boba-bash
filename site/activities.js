@@ -118,6 +118,7 @@
                 $('blockCombo').innerHTML=`×${last?.playerId===this.manager.userId?last.combo:1}<small>COMBO</small>`;
                 $('blockRivals').innerHTML=g.players.filter(p=>p.active&&p.id!==this.manager.userId).map(p=>`<div><span>${esc(p.name)}</span><b>${p.score}</b></div>`).join('');
                 $('blockFeed').textContent=last?`${esc(g.players.find(p=>p.id===last.playerId)?.name||'Someone')} popped ${last.size} cubes · +${last.points} points`:me?'Find a pair to start your combo.':'Watch the scores climb.';
+                if(last?.at&&last.at!==this.lastBlockEffectAt){this.lastBlockEffectAt=last.at;if(last.playerId===this.manager.userId)this.blockEffect(last);}
             }
             if(g.phase==='write'){
                 const input=$('bluffText');if(input){input.form.hidden=g.submitted;$('bluffLocked').hidden=!g.submitted;$('myBluff').textContent=g.mySubmission||'';}
@@ -176,6 +177,12 @@
                 $('watchSync').onclick=()=>this.syncWatch(true);$('radioVolume').oninput=e=>{if(this.radioGain)this.radioGain.gain.value=Number(e.target.value)/350;};
             }
             this.updateTogether();
+        }
+        blockEffect(last){
+            const tile=this.dialog.querySelector(`.a-cube[data-block="${last.index}"]`),board=$('blockBoard');if(!tile||!board)return;
+            const box=tile.getBoundingClientRect(),outer=board.getBoundingClientRect(),burst=document.createElement('div');burst.className='a-block-burst';burst.style.left=`${box.left-outer.left+box.width/2}px`;burst.style.top=`${box.top-outer.top+box.height/2}px`;burst.textContent=`+${last.points}${last.combo>1?` ×${last.combo}`:''}`;board.append(burst);setTimeout(()=>burst.remove(),900);
+            board.classList.remove('pop-shake');void board.offsetWidth;board.classList.add('pop-shake');setTimeout(()=>board.classList.remove('pop-shake'),330);
+            if(this.sound)this.playSfx(last.combo>=4?'tada':'pop');if(navigator.vibrate)navigator.vibrate(last.combo>=4?[25,30,35]:15);
         }
         updateTogether(){
             if(!this.dialog.open||this.mode!=='together'||!$('watchFrame'))return;
