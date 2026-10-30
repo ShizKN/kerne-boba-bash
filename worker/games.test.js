@@ -106,3 +106,22 @@ test('rematch resets scores and readiness, reactions and duck egg never grant po
     g.phase='finished'; g.players[0].score=999; command(g,alice,'rematch');
     assert.equal(g.phase,'lobby'); assert.equal(g.players[0].score,0); assert.equal(g.players[1].ready,false);
 });
+test('Block Riot gives each player a playable board and scores only validated clusters', () => {
+    const g=started('blocks');
+    assert.equal(g.phase,'blocks');
+    const own=[...view(g,alice.id,1000).boards[alice.id]];
+    assert.equal(own.length,36);
+    assert.deepEqual(own,view(g,bob.id,1000).boards[bob.id]);
+    const neighbor=i=>[i%6?i-1:-1,i%6<5?i+1:-1,i>=6?i-6:-1,i<30?i+6:-1].filter(v=>v>=0);
+    const index=own.findIndex((color,i)=>neighbor(i).some(j=>own[j]===color));
+    assert.ok(index>=0);
+    assert.throws(()=>command(g,alice,'pop',{index:99}),/tile|cluster/i);
+    assert.throws(()=>command(g,cara,'pop',{index}),/join|player|spectator/i);
+    command(g,alice,'pop',{index},1200);
+    assert.ok(g.players[0].score>=40);
+    assert.equal(g.players[1].score,0);
+    assert.notDeepEqual(view(g,alice.id,1200).boards[alice.id],own);
+    assert.throws(()=>command(g,alice,'pop',{index},1250),/wait|fast/i);
+    advance(g,g.deadline); assert.equal(g.phase,'finished');
+    assert.equal(view(g,bob.id,g.deadline).boards[alice.id].length,36);
+});

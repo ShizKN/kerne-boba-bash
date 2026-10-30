@@ -43,7 +43,7 @@ const BLUFFS = [
     ['The moon’s complaint about Earth was…','Too many unsolicited tides','The neighbors keep launching things','All the good snacks have gravity']
 ];
 const COLORS = new Set(['#1a1a1a','#e04b45','#e8b629','#3d9c70','#377dda','#9663c4','#ec83ad','#ffffff']);
-const PHASES = new Set(['choose','draw','write','vote']);
+const PHASES = new Set(['choose','draw','write','vote','blocks']);
 const normal = value => String(value).normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 const random = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
 const shuffled = values => { const out=[...values]; for(let i=out.length-1;i>0;i--) { const j=Math.floor(random()*(i+1)); [out[i],out[j]]=[out[j],out[i]]; } return out; };
@@ -53,9 +53,39 @@ const badge = (player,text) => { if(!player.badges.includes(text)) player.badges
 function feed(game,text,kind='note') { game.feed.push({id:crypto.randomUUID(),text,kind}); game.feed=game.feed.slice(-18); }
 function award(player,amount) { player.score+=amount; player.roundScore+=amount; }
 function player(info,host=false) { return {id:info.id,name:String(info.name).slice(0,20),score:0,roundScore:0,ready:host,online:true,active:true,badges:[],correct:0,fooled:0}; }
+const blockColor = () => Math.floor(random()*5);
+function blockBoard() {
+    const board=Array.from({length:36},blockColor);
+    if(!board.some((color,i)=>i%6<5&&board[i+1]===color || i<30&&board[i+6]===color)) board[1]=board[0];
+    return board;
+}
+function blockGroup(board,start) {
+    const color=board[start], found=new Set([start]), queue=[start];
+    for(const i of queue) for(const j of [i%6?i-1:-1,i%6<5?i+1:-1,i>=6?i-6:-1,i<30?i+6:-1])
+        if(j>=0&&!found.has(j)&&board[j]===color){found.add(j);queue.push(j);}
+    return queue;
+}
+function popBlocks(game,p,index,now) {
+    require(Number.isInteger(index)&&index>=0&&index<36,'Choose a valid tile.');
+    require(!p.lastBlockAt||now-p.lastBlockAt>=120,'Wait a moment before popping again.');
+    const board=p.board,group=blockGroup(board,index);
+    require(group.length>=2,'Pick a cluster of at least two matching tiles.');
+    const combo=p.lastBlockAt&&now-p.lastBlockAt<3500?Math.min(5,(p.combo||1)+1):1;
+    const frenzy=game.deadline-now<=15_000?2:1,points=group.length*group.length*10*combo*frenzy;
+    for(const i of group)board[i]=null;
+    for(let col=0;col<6;col++){
+        const kept=[];for(let row=5;row>=0;row--)if(board[row*6+col]!==null)kept.push(board[row*6+col]);
+        for(let row=5;row>=0;row--)board[row*6+col]=kept[5-row]??blockColor();
+    }
+    p.lastBlockAt=now;p.combo=combo;award(p,points);
+    if(combo>=4)badge(p,'Combo king');
+    if(group.length>=10)badge(p,'Meteor magnet');
+    game.blockLast={playerId:p.id,size:group.length,points,combo,at:now};
+    feed(game,`${p.name} popped ${group.length} blocks${combo>1?` · ×${combo} combo`:''}!`,'correct');
+}
 
 export function createGame(kind,host,settings={},now=Date.now()) {
-    require(kind==='sketch'||kind==='bluff','Choose a supported game.');
+    require(['sketch','bluff','blocks'].includes(kind),'Choose a supported game.');
     return {id:crypto.randomUUID(),kind,hostId:host.id,phase:'lobby',pace:settings.pace==='classic'?'classic':'quick',players:[player(host,true)],round:0,totalRounds:0,deadline:null,cleanupAt:now+30*60_000,strokes:[],feed:[],used:[],secret:{},note:''};
 }
 function roundStart(game,now) {
@@ -64,7 +94,12 @@ function roundStart(game,now) {
     game.round++; game.strokes=[]; game.feed=[]; game.note=''; game.lastReveal=null;
     game.players.forEach(p=>p.roundScore=0);
     game.secret={submissions:{},votes:{},guessed:{},hints:0,options:[]};
-    if(game.kind==='sketch') {
+    if(game.kind==='blocks') {
+        const sameBoard=blockBoard();
+        for(const p of online(game)){p.board=[...sameBoard];p.combo=0;p.lastBlockAt=0;}
+        game.blockLast=null;game.phase='blocks';game.deadline=now+(game.pace==='quick'?75_000:120_000);
+        feed(game,'Pop matching clusters. Bigger chains score more. Last 15 seconds are double points.');
+    } else if(game.kind==='sketch') {
         const order=game.turnOrder.filter(id=>online(game).some(p=>p.id===id));
         game.artistId=order[(game.round-1)%order.length];
         const available=WORDS.filter(w=>!game.used.includes(w));
@@ -121,6 +156,7 @@ export function advance(game,now=Date.now()) {
     } else if(game.phase==='write') beginVoting(game,now);
     else if(game.phase==='vote') finishVoting(game,now);
     else if(game.phase==='reveal') roundStart(game,now);
+    else if(game.phase==='blocks') finish(game,'The clock is out. The block champion is crowned!',now);
     else if(game.phase==='paused') finish(game,'A player could not reconnect. Your scores are safe here.',now);
     return true;
 }
@@ -156,7 +192,7 @@ export function act(game,info,action,data={},now=Date.now()) {
     else if(action==='start') {
         host(); require(game.phase==='lobby','The match has already started.');
         require(online(game).length>=2,'Invite at least two players to start.'); require(online(game).every(p=>p.ready),'Wait until everyone is ready.');
-        game.turnOrder=online(game).map(p=>p.id); game.totalRounds=game.kind==='sketch'?game.turnOrder.length*(game.pace==='quick'?1:2):(game.pace==='quick'?3:5);
+        game.turnOrder=online(game).map(p=>p.id); game.totalRounds=game.kind==='sketch'?game.turnOrder.length*(game.pace==='quick'?1:2):game.kind==='blocks'?1:(game.pace==='quick'?3:5);
         roundStart(game,now);
     } else if(action==='cancel') { host(); return {close:true}; }
     else if(action==='invite') { require(!game.lastInvite||now-game.lastInvite>=10_000,'The invitation is already on its way.'); game.lastInvite=now; return {invite:true}; }
@@ -169,7 +205,8 @@ export function act(game,info,action,data={},now=Date.now()) {
     else if(action==='reaction') { require(['👏','😂','🔥','🦆'].includes(data.emoji),'Choose a supported reaction.'); require(!p.lastReaction||now-p.lastReaction>=1500,'Give the confetti a second.'); p.lastReaction=now; return {reaction:{playerId:p.id,emoji:data.emoji}}; }
     else {
         require(data.round===game.round,'That round is over.');
-        if(action==='choose') { require(game.phase==='choose','Word selection is over.'); require(p.id===game.artistId,'Only the artist can choose a word.'); require(Number.isInteger(data.index)&&data.index>=0&&data.index<3,'Choose one of the three words.'); beginDrawing(game,data.index,now); }
+        if(action==='pop') { require(game.phase==='blocks','The block round is over.'); popBlocks(game,p,data.index,now); }
+        else if(action==='choose') { require(game.phase==='choose','Word selection is over.'); require(p.id===game.artistId,'Only the artist can choose a word.'); require(Number.isInteger(data.index)&&data.index>=0&&data.index<3,'Choose one of the three words.'); beginDrawing(game,data.index,now); }
         else if(action==='draw'||action==='clear'||action==='undo') {
             require(game.phase==='draw','Wait for the drawing round.'); require(p.id===game.artistId,'Only the artist can draw.');
             if(action==='clear') game.strokes=[];
@@ -226,6 +263,6 @@ export function view(game,playerId,now=Date.now()) {
         ownOptionId:visibleOptions.find(o=>o.authorId===playerId)?.id,
         submitted:!!game.secret.submissions?.[playerId],submissionCount:Object.keys(game.secret.submissions||{}).length,
         mySubmission:game.secret.submissions?.[playerId],myVote:game.secret.votes?.[playerId],votedCount:Object.keys(game.secret.votes||{}).length,
-        guessed:!!game.secret.guessed?.[playerId],isPlayer:!!me,strokes:game.kind==='sketch'?game.strokes:[],feed:game.feed,note:game.note,lastReveal:game.lastReveal||null
+        guessed:!!game.secret.guessed?.[playerId],isPlayer:!!me,strokes:game.kind==='sketch'?game.strokes:[],boards:game.kind==='blocks'?Object.fromEntries(game.players.filter(p=>p.board&&p.active).map(p=>[p.id,p.board])):undefined,blockLast:game.kind==='blocks'?game.blockLast:undefined,feed:game.feed,note:game.note,lastReveal:game.lastReveal||null
     };
 }

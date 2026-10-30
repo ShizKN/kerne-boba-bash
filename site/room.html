@@ -104,6 +104,17 @@
         <footer class="viewer-tools"><button id="viewerOut" aria-label="Zoom out">−</button><output id="viewerZoom">100%</output><button id="viewerIn" aria-label="Zoom in">+</button><button id="viewerFit">Fit</button><button id="viewerCameraToggle" aria-pressed="true">Cameras</button></footer>
     </dialog>
 
+    <dialog id="ratingDialog" aria-labelledby="ratingTitle">
+        <div class="rating-top"><span>BEFORE YOU GO</span><button type="button" id="ratingSkipTop" aria-label="Leave without rating">✕</button></div>
+        <h2 id="ratingTitle">How was your call?</h2>
+        <p>Your rating helps make KERNE better. No name or room details are sent.</p>
+        <div class="rating-stars" role="group" aria-label="Rate your call from one to five stars">
+            <button type="button" data-rating="1" aria-label="1 star" aria-pressed="false">★</button><button type="button" data-rating="2" aria-label="2 stars" aria-pressed="false">★</button><button type="button" data-rating="3" aria-label="3 stars" aria-pressed="false">★</button><button type="button" data-rating="4" aria-label="4 stars" aria-pressed="false">★</button><button type="button" data-rating="5" aria-label="5 stars" aria-pressed="false">★</button>
+        </div>
+        <div class="rating-actions"><button type="button" id="ratingSkip">Skip</button><button type="button" id="ratingSend" disabled>Send rating ↗</button></div>
+        <p id="ratingStatus" role="status" aria-live="polite"></p>
+    </dialog>
+
     <div class="toast" id="toast"></div>
 
     <script>
@@ -845,7 +856,37 @@
         document.getElementById('retryRoomMic').onclick = () => manager.requestTrack('audio');
         document.getElementById('dismissPermissionNotice').onclick = () => document.getElementById('permissionNotice').classList.remove('show');
         document.getElementById('soundBtn').onclick = () => manager.toggleSound();
-        document.getElementById('leaveBtn').onclick = () => { window.location.href = '/'; };
+        const ratingDialog = document.getElementById('ratingDialog');
+        const leaveCall = () => { window.location.href = '/'; };
+        document.getElementById('leaveBtn').onclick = () => { if (!ratingDialog.open) ratingDialog.showModal(); };
+        document.getElementById('ratingSkip').onclick = leaveCall;
+        document.getElementById('ratingSkipTop').onclick = leaveCall;
+        ratingDialog.addEventListener('cancel', event => { event.preventDefault(); leaveCall(); });
+        ratingDialog.querySelectorAll('[data-rating]').forEach(button => button.onclick = () => {
+            const value = Number(button.dataset.rating);
+            ratingDialog.dataset.rating = String(value);
+            ratingDialog.querySelectorAll('[data-rating]').forEach(star => {
+                star.classList.toggle('selected', Number(star.dataset.rating) <= value);
+                star.setAttribute('aria-pressed', String(star === button));
+            });
+            document.getElementById('ratingSend').disabled = false;
+            document.getElementById('ratingStatus').textContent = '';
+        });
+        document.getElementById('ratingSend').onclick = async () => {
+            const button = document.getElementById('ratingSend');
+            button.disabled = true; button.textContent = 'Sending…';
+            try {
+                const endpoint = new URL(window.KERNE_SIGNAL_URL);
+                endpoint.protocol = endpoint.protocol === 'wss:' ? 'https:' : 'http:';
+                endpoint.pathname = '/feedback';
+                const response = await fetch(endpoint, { method: 'POST', mode: 'cors', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating: Number(ratingDialog.dataset.rating), session: manager.memberToken }), signal: AbortSignal.timeout(8000) });
+                if (!response.ok) throw new Error('Feedback unavailable');
+                leaveCall();
+            } catch (_) {
+                document.getElementById('ratingStatus').textContent = 'Could not send your rating. Try again or skip.';
+                button.disabled = false; button.textContent = 'Try again ↗';
+            }
+        };
         document.getElementById('chatForm').onsubmit = (e) => {
             e.preventDefault(); const i = document.getElementById('chatInput');
             if (i.value.trim()) { manager.socket.emit('chat-message', { roomId: manager.currentRoom, message: i.value }); i.value = ''; }

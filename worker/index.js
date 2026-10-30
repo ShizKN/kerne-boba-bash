@@ -5,6 +5,8 @@ const MAX_ROOM_SIZE = 4;
 const LEVELS = new Set(['Middle school', 'High school', 'Preparatory class', 'Undergraduate', "Master's", 'Doctorate']);
 const LEGACY_LEVELS = { 'Collège': 'Middle school', 'Lycée': 'High school', 'Prépa': 'Preparatory class', 'Licence': 'Undergraduate', 'Master': "Master's", 'Doctorat': 'Doctorate' };
 const STUN = [{ urls: 'stun:stun.cloudflare.com:3478' }];
+const SOUNDS = new Set(['boing','quack','tada','pop','zap','drum']);
+const STATIONS = new Set(['off','focus','arcade','rain']);
 function send(ws, event, data, id) {
     if (ws.readyState !== WebSocket.OPEN) return;
     try { ws.send(JSON.stringify({ event, data, ...(id ? { id } : {}) })); } catch (_) {}
@@ -14,9 +16,9 @@ function isAllowedOrigin(origin) {
     if (!origin) return false;
     try {
         const url = new URL(origin);
-        return url.hostname === 'kerne.apospace.com' ||
+        return url.protocol === 'https:' && (url.hostname === 'kerne.apospace.com' ||
             url.hostname === 'kernee.pages.dev' ||
-            url.hostname.endsWith('.kernee.pages.dev') ||
+            url.hostname.endsWith('.kernee.pages.dev')) ||
             (url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.protocol === 'http:';
     } catch (_) { return false; }
 }
@@ -25,11 +27,83 @@ export class KerneRooms extends DurableObject {
     constructor(ctx, env) {
         super(ctx, env);
         ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room_games (room TEXT PRIMARY KEY, state TEXT NOT NULL, due INTEGER NOT NULL)');
+        ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS feedback_limits (visitor TEXT PRIMARY KEY, at INTEGER NOT NULL)');
+        ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS feedback_buckets (network TEXT PRIMARY KEY, started INTEGER NOT NULL, count INTEGER NOT NULL)');
+        ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room_media (room TEXT PRIMARY KEY, state TEXT NOT NULL, updated INTEGER NOT NULL)');
+        if (!ctx.storage.sql.exec('PRAGMA table_info(room_media)').toArray().some(column => column.name === 'updated'))
+            ctx.storage.sql.exec('ALTER TABLE room_media ADD COLUMN updated INTEGER NOT NULL DEFAULT 0');
+    }
+
+    async feedback(request) {
+        const headers = { 'Access-Control-Allow-Origin': request.headers.get('Origin'), 'Vary': 'Origin', 'Cache-Control': 'no-store' };
+        if (Number(request.headers.get('Content-Length') || 0) > 512) return new Response('Too large', { status: 413, headers });
+        let body;
+        try { const raw = await request.text(); if (raw.length > 512) throw new Error('Too large'); body = JSON.parse(raw); }
+        catch (_) { return new Response('Invalid feedback', { status: 400, headers }); }
+        if (!body || !Number.isInteger(body.rating) || body.rating < 1 || body.rating > 5 || typeof body.session !== 'string' || !/^[a-f0-9-]{36}$/i.test(body.session)) return new Response('Choose 1–5 stars', { status: 400, headers });
+        const target = this.env.DISCORD_FEEDBACK_WEBHOOK;
+        if (!target) return new Response('Feedback unavailable', { status: 503, headers });
+        let endpoint;
+        try { endpoint = new URL(target); if (endpoint.protocol !== 'https:' || endpoint.hostname !== 'discord.com' || !/^\/api\/webhooks\/\d+\/[^/]+$/.test(endpoint.pathname)) throw new Error(); }
+        catch (_) { return new Response('Feedback unavailable', { status: 503, headers }); }
+        const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(v => v.toString(16).padStart(2,'0')).join('');
+        const network = await hash(ip), visitor = await hash(`${ip}|${body.session}`);
+        const now = Date.now();
+        const recent = this.ctx.storage.sql.exec('SELECT at FROM feedback_limits WHERE visitor = ?', visitor).toArray()[0];
+        const bucket = this.ctx.storage.sql.exec('SELECT started, count FROM feedback_buckets WHERE network = ?', network).toArray()[0];
+        if (recent && now - recent.at < 5 * 60_000 || bucket && now - bucket.started < 60 * 60_000 && bucket.count >= 60) return new Response('Please wait before rating again', { status: 429, headers });
+        this.ctx.storage.sql.exec('INSERT OR REPLACE INTO feedback_limits (visitor, at) VALUES (?, ?)', visitor, now);
+        this.ctx.storage.sql.exec('INSERT OR REPLACE INTO feedback_buckets (network, started, count) VALUES (?, ?, ?)', network, bucket && now - bucket.started < 60 * 60_000 ? bucket.started : now, bucket && now - bucket.started < 60 * 60_000 ? bucket.count + 1 : 1);
+        this.ctx.storage.sql.exec('DELETE FROM feedback_limits WHERE at < ?', now - 24 * 60 * 60_000);
+        this.ctx.storage.sql.exec('DELETE FROM feedback_buckets WHERE started < ?', now - 24 * 60 * 60_000);
+        try {
+            const response = await fetch(endpoint.href, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: `KERNE call rating: ${'⭐'.repeat(body.rating)} (${body.rating}/5)`, allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(6000) });
+            if (!response.ok) throw new Error('Webhook failed');
+            return new Response(null, { status: 204, headers });
+        } catch (_) {
+            this.ctx.storage.sql.exec('DELETE FROM feedback_limits WHERE visitor = ? AND at = ?', visitor, now);
+            this.ctx.storage.sql.exec('UPDATE feedback_buckets SET count = MAX(0, count - 1) WHERE network = ?', network);
+            return new Response('Feedback unavailable', { status: 502, headers });
+        }
     }
 
     game(room) {
         const row = this.ctx.storage.sql.exec('SELECT state FROM room_games WHERE room = ?', room).toArray()[0];
         return row ? JSON.parse(row.state) : null;
+    }
+    media(room) {
+        const row = this.ctx.storage.sql.exec('SELECT state, updated FROM room_media WHERE room = ?', room).toArray()[0];
+        if (row && Date.now() - row.updated < 24 * 60 * 60_000) return JSON.parse(row.state);
+        if (row) this.ctx.storage.sql.exec('DELETE FROM room_media WHERE room = ?', room);
+        return { video: { id: '', playing: false, position: 0, at: 0 }, radio: { station: 'off', at: 0 } };
+    }
+    async mediaMessage(ws, state, event, data) {
+        const now = Date.now(), rate = state.mediaRate && now - state.mediaRate.at < 1000 ? state.mediaRate : { at: now, count: 0 };
+        rate.count++; ws.serializeAttachment({ ...ws.deserializeAttachment(), mediaRate: rate });
+        if (rate.count > 8) return;
+        if (event === 'sound-play') {
+            if (!SOUNDS.has(data.id) || state.lastSound && now - state.lastSound < 650) return;
+            ws.serializeAttachment({ ...ws.deserializeAttachment(), lastSound: now });
+            this.broadcast(state.roomId, 'sound-play', { id: data.id, from: state.name, at: now });
+            return;
+        }
+        const media = this.media(state.roomId);
+        if (event === 'watch-control') {
+            if (data.id !== undefined) {
+                if (typeof data.id !== 'string' || data.id && !/^[a-zA-Z0-9_-]{11}$/.test(data.id)) return;
+                media.video = { id: data.id, playing: false, position: 0, at: now };
+            } else {
+                if (!media.video.id || typeof data.playing !== 'boolean' || !Number.isFinite(data.position) || data.position < 0 || data.position > 86400) return;
+                media.video = { ...media.video, playing: data.playing, position: data.position, at: now };
+            }
+        } else if (event === 'radio-control') {
+            if (!STATIONS.has(data.station)) return;
+            media.radio = { station: data.station, at: now };
+        } else return;
+        this.ctx.storage.sql.exec('INSERT OR REPLACE INTO room_media (room, state, updated) VALUES (?, ?, ?)', state.roomId, JSON.stringify(media), now);
+        this.ctx.storage.sql.exec('DELETE FROM room_media WHERE updated < ?', now - 24 * 60 * 60_000);
+        this.broadcast(state.roomId, 'media-state', { ...media, by: state.name, serverNow: now });
     }
     saveGame(room, game) {
         if (!game) this.ctx.storage.sql.exec('DELETE FROM room_games WHERE room = ?', room);
@@ -91,6 +165,7 @@ export class KerneRooms extends DurableObject {
     }
 
     async fetch(request) {
+        if (new URL(request.url).pathname === '/feedback' && request.method === 'POST') return this.feedback(request);
         if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
             return new Response('WebSocket required', { status: 426 });
         }
@@ -174,6 +249,7 @@ export class KerneRooms extends DurableObject {
             const screenShares = existing.map(peer => peer.deserializeAttachment()).filter(p => p.screenStreamId)
                 .map(p => ({ peerId: p.socketId, streamId: p.screenStreamId }));
             send(ws, 'room-joined', { roomId, users, yourPeerId: state.socketId, userStates, screenShares });
+            send(ws, 'media-state', { ...this.media(roomId), serverNow: Date.now() });
             this.broadcast(roomId, 'user-joined', user, ws);
             let game = this.game(roomId);
             if (game?.emptyAt && !game.players.some(p => p.id === userId)) game = null;
@@ -184,6 +260,7 @@ export class KerneRooms extends DurableObject {
         }
 
         if (!state.roomId) return;
+        if (['sound-play','watch-control','radio-control'].includes(event)) { await this.mediaMessage(ws, state, event, data); return; }
         if (['game-get','game-create','game-action'].includes(event)) { await this.gameMessage(ws, state, event, data); return; }
         if (event === 'request-ice-servers') {
             const ice = await this.iceServers(ws, state);
@@ -277,6 +354,13 @@ export default {
     async fetch(request, env) {
         const path = new URL(request.url).pathname;
         if (path === '/health') return Response.json({ status: 'ok', service: 'kerne-rooms' });
+        if (path === '/feedback') {
+            const origin = request.headers.get('Origin');
+            if (!isAllowedOrigin(origin)) return new Response('Forbidden origin', { status: 403 });
+            if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Max-Age': '3600', 'Vary': 'Origin' } });
+            if (request.method !== 'POST' || request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') return new Response('Invalid request', { status: 405 });
+            return env.ROOMS.get(env.ROOMS.idFromName('kerne-global')).fetch(request);
+        }
         if (path !== '/ws' || request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('Not found', { status: 404 });
         if (!isAllowedOrigin(request.headers.get('Origin'))) return new Response('Forbidden origin', { status: 403 });
         return env.ROOMS.get(env.ROOMS.idFromName('kerne-global')).fetch(request);
