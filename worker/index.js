@@ -98,14 +98,14 @@ export class KerneRooms extends DurableObject {
     }
     async focusMessage(ws, state, data) {
         const room = state.roomId, now = Date.now(), action = data.action;
-        const rate = state.focusRate && now - state.focusRate.at < 1000 ? state.focusRate : { at: now, count: 0 };
-        rate.count++; ws.serializeAttachment({ ...ws.deserializeAttachment(), focusRate: rate });
-        if (rate.count > 4) return;
         let focus = this.focus(room);
         try {
             if (focus && advanceFocus(focus, now)) { this.saveFocus(room, focus); this.publishFocus(room, focus); }
             if (action === 'get') { this.publishFocus(room, focus, ws); return; }
             if (typeof action !== 'string') throw new Error('Choose a timer action.');
+            const rate = state.focusRate && now - state.focusRate.at < 1000 ? state.focusRate : { at: now, count: 0 };
+            rate.count++; ws.serializeAttachment({ ...ws.deserializeAttachment(), focusRate: rate });
+            if (rate.count > 8) throw new Error('Slow down for a second.');
             focus = controlFocus(focus, { id: state.userId, name: state.name }, action, data, this.members(room), now);
             this.saveFocus(room, focus); this.publishFocus(room, focus);
             await this.scheduleState();
