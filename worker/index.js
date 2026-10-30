@@ -101,7 +101,12 @@ export class KerneRooms extends DurableObject {
         let focus = this.focus(room);
         try {
             if (focus && advanceFocus(focus, now)) { this.saveFocus(room, focus); this.publishFocus(room, focus); }
-            if (action === 'get') { this.publishFocus(room, focus, ws); return; }
+            if (action === 'get') {
+                const read = state.focusReadRate && now - state.focusReadRate.at < 1000 ? state.focusReadRate : { at: now, count: 0 };
+                read.count++; ws.serializeAttachment({ ...ws.deserializeAttachment(), focusReadRate: read });
+                if (read.count <= 8) this.publishFocus(room, focus, ws);
+                return;
+            }
             if (typeof action !== 'string') throw new Error('Choose a timer action.');
             const rate = state.focusRate && now - state.focusRate.at < 1000 ? state.focusRate : { at: now, count: 0 };
             rate.count++; ws.serializeAttachment({ ...ws.deserializeAttachment(), focusRate: rate });
@@ -190,7 +195,7 @@ export class KerneRooms extends DurableObject {
             let result = {};
             if (event === 'game-create') {
                 if (game) { this.publishGame(room, game, ws); throw new Error('A game is already open. Join it from Activities.'); }
-                game = createGame(data.kind, info, { pace: data.pace }, now);
+                game = createGame(data.kind, info, { pace: data.pace, solo: data.solo === true }, now);
             } else {
                 if (!game) throw new Error('This game has ended. Open a new one.');
                 result = act(game, info, data.action, data, now);

@@ -7,17 +7,16 @@ const alice = { id: 'alice', name: 'Alice' }, bob = { id: 'bob', name: 'Bob' }, 
 const command = (g, p, action, data = {}, now = 1000) => act(g,p,action,{ gameId:g.id,round:g.round,...data },now);
 function started(kind, players = [alice,bob]) {
     const g = createGame(kind,alice,{pace:'quick'},1000);
-    for (const p of players.slice(1)) { command(g,p,'join'); command(g,p,'ready',{ready:true}); }
+    for (const p of players.slice(1)) command(g,p,'join');
     command(g,alice,'start'); return g;
 }
 function choose(g, now = 1100) { const artist = g.players.find(p=>p.id===g.artistId); command(g,artist,'choose',{index:0},now); return artist; }
 
-test('lobby requires two ready players and only the host can start', () => {
+test('joining is enough to play, and only the host can start a friends match', () => {
     const g = createGame('sketch',alice,{},1000);
-    assert.throws(()=>command(g,alice,'start'),/two|2/i);
+    assert.throws(()=>command(g,alice,'start'),/more player/i);
     command(g,bob,'join'); assert.throws(()=>command(g,bob,'start'),/host/i);
-    assert.throws(()=>command(g,alice,'start'),/ready/i);
-    command(g,bob,'ready',{ready:true}); command(g,alice,'start'); assert.equal(g.phase,'choose');
+    command(g,alice,'start'); assert.equal(g.phase,'choose');
 });
 test('secret words and word choices never reach a guesser or a spectator', () => {
     const g=started('sketch'); const artist=g.players.find(p=>p.id===g.artistId);
@@ -105,7 +104,7 @@ test('rematch resets scores and readiness, reactions and duck egg never grant po
     const g=started('bluff'); command(g,alice,'egg'); command(g,alice,'egg');
     assert.equal(g.players[0].score,0); assert.equal(g.players[0].badges.filter(b=>b==='Duck detective').length,1);
     g.phase='finished'; g.players[0].score=999; command(g,alice,'rematch');
-    assert.equal(g.phase,'lobby'); assert.equal(g.players[0].score,0); assert.equal(g.players[1].ready,false);
+    assert.equal(g.phase,'lobby'); assert.equal(g.players[0].score,0); assert.equal(g.players[1].ready,true);
 });
 test('Block Riot gives each player a playable board and scores only validated clusters', () => {
     const g=started('blocks');
@@ -152,11 +151,10 @@ test('room focus timer validates settings, owner controls, pause, takeover and e
 });
 test('solo bots stay server-owned and play all three games', () => {
     for(const kind of ['sketch','bluff','blocks']) {
-        const g=createGame(kind,alice,{pace:'quick'},1000);
-        command(g,alice,'solo');assert.equal(g.players.filter(p=>p.bot).length,2);
+        const g=createGame(kind,alice,{pace:'quick',solo:true},1000);
+        assert.equal(g.players.filter(p=>p.bot).length,2);
         assert.equal(view(g,alice.id).solo,true);
         assert.throws(()=>command(g,bob,'solo'),/Join|player|Spectator/i);
-        command(g,alice,'start');
         if(kind==='sketch') {
             assert.equal(g.artistId,alice.id);choose(g,1100);
             for(let i=0;i<2;i++)command(g,alice,'draw',{stroke:{id:`solo-${i}`,color:'#1a1a1a',width:5,points:[{x:.1+i*.1,y:.2},{x:.3+i*.1,y:.4}]}},1200+i);
@@ -176,4 +174,12 @@ test('solo bots stay server-owned and play all three games', () => {
         presence(g,[],3000);assert.equal(g.hostId,alice.id);
         assert.ok(g.players.filter(p=>p.bot).every(p=>p.online));
     }
+});
+test('solo rematch starts directly and discards previous round state', () => {
+    const g=createGame('blocks',alice,{solo:true},1000),oldId=g.id;
+    advance(g,g.deadline);assert.equal(g.phase,'finished');
+    g.staleMarker='old';command(g,alice,'rematch',{},90000);
+    assert.equal(g.phase,'blocks');assert.equal(g.players.filter(p=>p.bot).length,2);
+    assert.notEqual(g.id,oldId);assert.equal(g.staleMarker,undefined);
+    assert.ok(g.players.every(p=>p.score===0));
 });

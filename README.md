@@ -1,16 +1,19 @@
 # KERNE
 
-[KERNE](https://kerne.apospace.com) is a study call for up to four people, with camera, microphone, chat, screen sharing, and three live multiplayer breaks: **Sketch Rush**, **Bluff Club**, and **Block Riot**. The call continues while a game is open. Screen shares have a full-screen viewer with zoom and visible camera previews. On phones, the shared screen takes the main stage and cameras stay in a scrollable strip. The Together lounge adds shared YouTube controls, six original generated sounds, and three original generated radio loops.
+[KERNE](https://kerne.apospace.com) is a study call for up to four people, with camera, microphone, chat, screen sharing, and three games: **Sketch Rush**, **Bluff Club**, and **Block Riot**. Each game works with friends in the call or solo against two scripted, server-controlled bots. The call continues while a game is open. Screen shares have a full-screen viewer with zoom and visible camera previews. On phones, the shared screen takes the main stage and cameras stay in a scrollable strip. The Together lounge adds shared YouTube controls, six original generated sounds, and three original generated radio loops. A room-wide focus timer supports one focus block or repeating work, short breaks, and a longer break every fourth cycle.
+
+Open **Activities** to search the catalog or filter by Games, Watch & listen, and Focus. Each game has a three-step preview. **Practice solo** starts immediately with two bots. For a friends game, players join once and the host starts; there is no separate ready toggle. The back arrow returns to the catalog while the current game keeps running.
 
 ## Code to review
 
 - `site/index.html`: English entry page and room setup.
 - `site/room.html`, `site/room.css`: call, media controls, responsive layout, and screen viewer.
-- `site/activities.js`: games, drawing, shared watch/radio/soundboard, scores, reactions, and camera previews.
+- `site/activities.js`: games, drawing, shared watch/radio/soundboard, focus timer, scores, reactions, and camera previews.
 - `site/signaling.js`: WebSocket connection and reconnection.
 - `worker/index.js`: room membership, signaling, chat, TURN access, media synchronization, rating delivery, and game persistence.
 - `worker/games.js`: server-owned game rules and per-player state filtering.
-- `worker/games.test.js`: rule, secret-visibility, reconnect, and scoring tests.
+- `worker/focus.js`: server-owned focus timer rules and deadlines.
+- `worker/games.test.js`: game and timer rule, secret-visibility, reconnect, bot, and scoring tests.
 
 The static site needs no build step. A Cloudflare Worker and Durable Object coordinate rooms. Audio/video use WebRTC; the Worker creates short-lived TURN credentials. Secrets are configured in Cloudflare and excluded from this repository.
 
@@ -30,7 +33,7 @@ Configure `TURN_KEY_ID`, `TURN_KEY_API_TOKEN`, and `DISCORD_FEEDBACK_WEBHOOK` as
 
 ## Verification
 
-The game engine has automated rule tests. Local WebSocket tests used four clients to check drawing, scoring, private answers, room isolation, reconnects, and timed progression. A two-client test checks radio, watch state, soundboard, and Block Riot. Browser checks covered two people in one call and a 320-pixel phone layout. Media quality still depends on browser, device, and network; a real phone switching between Wi-Fi and cellular requires separate device testing.
+Sixteen automated rule tests pass. Local WebSocket tests used four clients to check drawing, scoring, private answers, room isolation, reconnects, and timed progression. A two-client test checks radio, watch state, soundboard, and Block Riot. On the deployed site, two browser clients checked the shared focus timer, host permissions, pause/resume/skip/stop, direct solo launch, single-step joining, drawing/guessing, bluff submission/voting, block hints, radio synchronization, and layouts from 320 pixels through desktop and landscape. Live WebSocket tests exercised solo Bluff Club voting, Block Riot bot scoring, and Sketch Rush bot guessing. Media quality still depends on browser, device, and network; a real phone switching between Wi-Fi and cellular requires separate device testing.
 
 ## Rights
 

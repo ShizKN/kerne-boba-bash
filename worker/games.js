@@ -52,7 +52,7 @@ const online = game => game.players.filter(p=>p.online && p.active);
 const badge = (player,text) => { if(!player.badges.includes(text)) player.badges.push(text); };
 function feed(game,text,kind='note') { game.feed.push({id:crypto.randomUUID(),text,kind}); game.feed=game.feed.slice(-18); }
 function award(player,amount) { player.score+=amount; player.roundScore+=amount; }
-function player(info,host=false) { return {id:info.id,name:String(info.name).slice(0,20),score:0,roundScore:0,ready:host,online:true,active:true,badges:[],correct:0,fooled:0}; }
+function player(info,ready=false) { return {id:info.id,name:String(info.name).slice(0,20),score:0,roundScore:0,ready,online:true,active:true,badges:[],correct:0,fooled:0}; }
 function addBots(game) {
     require(game.phase==='lobby' && game.players.filter(p=>p.active).length===1,'Solo mode needs an empty lobby.');
     game.solo=true;
@@ -95,7 +95,16 @@ function popBlocks(game,p,index,now) {
 
 export function createGame(kind,host,settings={},now=Date.now()) {
     require(['sketch','bluff','blocks'].includes(kind),'Choose a supported game.');
-    return {id:crypto.randomUUID(),kind,hostId:host.id,phase:'lobby',pace:settings.pace==='classic'?'classic':'quick',players:[player(host,true)],round:0,totalRounds:0,deadline:null,cleanupAt:now+30*60_000,strokes:[],feed:[],used:[],secret:{},note:''};
+    const game={id:crypto.randomUUID(),kind,hostId:host.id,phase:'lobby',pace:settings.pace==='classic'?'classic':'quick',players:[player(host,true)],round:0,totalRounds:0,deadline:null,cleanupAt:now+30*60_000,strokes:[],feed:[],used:[],secret:{},note:'',solo:false,botNextAt:null};
+    if(settings.solo===true){addBots(game);startMatch(game,now);}
+    return game;
+}
+function startMatch(game,now) {
+    require(game.phase==='lobby','The match has already started.');
+    require(online(game).length>=2,'One more player needs to join.');
+    game.turnOrder=online(game).filter(p=>!p.bot).map(p=>p.id);
+    game.totalRounds=game.kind==='sketch'?(game.solo?(game.pace==='quick'?3:5):game.turnOrder.length*(game.pace==='quick'?1:2)):game.kind==='blocks'?1:(game.pace==='quick'?3:5);
+    roundStart(game,now);
 }
 function roundStart(game,now) {
     if(online(game).length<2) return finish(game,'Not enough players. Invite your friends for a rematch.',now);
@@ -223,23 +232,26 @@ export function act(game,info,action,data={},now=Date.now()) {
     let p=game.players.find(p=>p.id===info.id&&p.active);
     if(action==='join') {
         require(game.phase==='lobby','Join the next match. You can watch this one.');
-        if(!p) { require(game.players.filter(p=>p.active).length<4,'This game is full.'); game.players.push(player(info)); }
-        else p.online=true;
+        if(!p) { require(game.players.filter(p=>p.active).length<4,'This game is full.'); p=player(info,true);game.players.push(p); }
+        else {p.online=true;p.ready=true;}
         return {};
     }
     require(p,'Join the game first. Spectators cannot play.');
     const host=()=>require(info.id===game.hostId,'Only the host can do that.');
-    if(action==='solo') {host();addBots(game);}
+    if(action==='solo') {host();addBots(game);startMatch(game,now);}
     else if(action==='ready') { require(game.phase==='lobby','The match has already started.'); require(typeof data.ready==='boolean','Choose a ready state.'); p.ready=data.ready; }
     else if(action==='settings') { host(); require(game.phase==='lobby','Settings are locked during a match.'); require(['quick','classic'].includes(data.pace),'Choose a supported pace.'); game.pace=data.pace; }
     else if(action==='start') {
-        host(); require(game.phase==='lobby','The match has already started.');
-        require(online(game).length>=2,'Invite at least two players to start.'); require(online(game).every(p=>p.ready),'Wait until everyone is ready.');
-        game.turnOrder=online(game).filter(p=>!p.bot).map(p=>p.id); game.totalRounds=game.kind==='sketch'?(game.solo?(game.pace==='quick'?3:5):game.turnOrder.length*(game.pace==='quick'?1:2)):game.kind==='blocks'?1:(game.pace==='quick'?3:5);
-        roundStart(game,now);
+        host();startMatch(game,now);
     } else if(action==='cancel') { host(); return {close:true}; }
     else if(action==='invite') { require(!game.lastInvite||now-game.lastInvite>=10_000,'The invitation is already on its way.'); game.lastInvite=now; return {invite:true}; }
-    else if(action==='rematch') { host(); require(game.phase==='finished','Finish this match first.'); const next=createGame(game.kind,info,{pace:game.pace},now); next.players=online(game).filter(v=>!v.bot).map(v=>player(v,v.id===info.id)); Object.assign(game,next); }
+    else if(action==='rematch') {
+        host();require(game.phase==='finished','Finish this match first.');
+        const next=createGame(game.kind,info,{pace:game.pace,solo:game.solo},now);
+        if(!game.solo)next.players=online(game).filter(v=>!v.bot).map(v=>player(v,true));
+        for(const key of Object.keys(game))delete game[key];
+        Object.assign(game,next);
+    }
     else if(action==='leave') {
         p.active=false; p.online=false;
         if(game.phase==='lobby') game.players=game.players.filter(v=>v.active);
@@ -299,7 +311,7 @@ export function view(game,playerId,now=Date.now()) {
     const visibleOptions=['vote','reveal','finished'].includes(game.phase)?game.secret.options||[]:[];
     return {
         id:game.id,kind:game.kind,phase:game.phase,hostId:game.hostId,pace:game.pace,round:game.round,totalRounds:game.totalRounds,deadline:game.deadline,serverNow:now,
-        players:game.players.map(({id,name,score,roundScore,ready,online,active,badges,bot})=>({id,name,score,roundScore,ready,online,active,badges,bot:!!bot})),solo:!!game.solo,
+        players:game.players.map(({id,name,score,roundScore,ready,online,active,badges,bot,combo,lastBlockAt})=>({id,name,score,roundScore,ready,online,active,badges,bot:!!bot,combo:combo||0,lastBlockAt:lastBlockAt||0})),solo:!!game.solo,
         artistId:game.artistId,word:game.kind==='sketch'?{mask,...((artist||revealing)&&answer?{answer}:{}),...(artist&&game.phase==='choose'?{choices:game.secret.choices}:{})}:{},
         prompt:game.kind==='bluff'?game.prompt:undefined,
         options:visibleOptions.map(o=>({id:o.id,text:o.text,...(revealing?{isAnswer:o.isAnswer,authors:o.authorId?[game.players.find(p=>p.id===o.authorId)?.name||'Player']:[],voters:Object.entries(game.secret.votes||{}).filter(([,id])=>id===o.id).map(([id])=>game.players.find(p=>p.id===id)?.name||'Player')}:{})})),
