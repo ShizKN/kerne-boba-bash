@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { createGame, act, advance, presence, view, nextDeadline } from './games.js';
+import { advanceFocus, controlFocus, focusDue } from './focus.js';
 
 const MAX_ROOM_SIZE = 4;
 const LEVELS = new Set(['Middle school', 'High school', 'Preparatory class', 'Undergraduate', "Master's", 'Doctorate']);
@@ -30,6 +31,7 @@ export class KerneRooms extends DurableObject {
         ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS feedback_limits (visitor TEXT PRIMARY KEY, at INTEGER NOT NULL)');
         ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS feedback_buckets (network TEXT PRIMARY KEY, started INTEGER NOT NULL, count INTEGER NOT NULL)');
         ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room_media (room TEXT PRIMARY KEY, state TEXT NOT NULL, updated INTEGER NOT NULL)');
+        ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room_focus (room TEXT PRIMARY KEY, state TEXT NOT NULL, due INTEGER)');
         if (!ctx.storage.sql.exec('PRAGMA table_info(room_media)').toArray().some(column => column.name === 'updated'))
             ctx.storage.sql.exec('ALTER TABLE room_media ADD COLUMN updated INTEGER NOT NULL DEFAULT 0');
     }
@@ -81,6 +83,34 @@ export class KerneRooms extends DurableObject {
         if (row) this.ctx.storage.sql.exec('DELETE FROM room_media WHERE room = ?', room);
         return { video: { id: '', playing: false, position: 0, at: 0 }, radio: { station: 'off', at: 0 } };
     }
+    focus(room) {
+        const row = this.ctx.storage.sql.exec('SELECT state FROM room_focus WHERE room = ?', room).toArray()[0];
+        return row ? JSON.parse(row.state) : null;
+    }
+    saveFocus(room, focus) {
+        if (!focus) this.ctx.storage.sql.exec('DELETE FROM room_focus WHERE room = ?', room);
+        else this.ctx.storage.sql.exec('INSERT OR REPLACE INTO room_focus (room, state, due) VALUES (?, ?, ?)', room, JSON.stringify(focus), focusDue(focus));
+    }
+    publishFocus(room, focus, target) {
+        const payload = { focus, serverNow: Date.now() };
+        if (target) send(target, 'focus-state', payload);
+        else this.broadcast(room, 'focus-state', payload);
+    }
+    async focusMessage(ws, state, data) {
+        const room = state.roomId, now = Date.now(), action = data.action;
+        const rate = state.focusRate && now - state.focusRate.at < 1000 ? state.focusRate : { at: now, count: 0 };
+        rate.count++; ws.serializeAttachment({ ...ws.deserializeAttachment(), focusRate: rate });
+        if (rate.count > 4) return;
+        let focus = this.focus(room);
+        try {
+            if (focus && advanceFocus(focus, now)) { this.saveFocus(room, focus); this.publishFocus(room, focus); }
+            if (action === 'get') { this.publishFocus(room, focus, ws); return; }
+            if (typeof action !== 'string') throw new Error('Choose a timer action.');
+            focus = controlFocus(focus, { id: state.userId, name: state.name }, action, data, this.members(room), now);
+            this.saveFocus(room, focus); this.publishFocus(room, focus);
+            await this.scheduleState();
+        } catch (error) { send(ws, 'focus-error', { message: error.message }); }
+    }
     async mediaMessage(ws, state, event, data) {
         const now = Date.now(), rate = state.mediaRate && now - state.mediaRate.at < 1000 ? state.mediaRate : { at: now, count: 0 };
         rate.count++; ws.serializeAttachment({ ...ws.deserializeAttachment(), mediaRate: rate });
@@ -122,9 +152,11 @@ export class KerneRooms extends DurableObject {
             send(ws, 'game-state', { game: game ? view(game, ws.deserializeAttachment().userId) : null, serverNow: Date.now() });
         }
     }
-    async scheduleGames() {
-        const row = this.ctx.storage.sql.exec('SELECT MIN(due) AS due FROM room_games').toArray()[0];
-        if (row?.due != null) await this.ctx.storage.setAlarm(Math.max(Date.now() + 25, row.due));
+    async scheduleState() {
+        const gameDue = this.ctx.storage.sql.exec('SELECT MIN(due) AS due FROM room_games').toArray()[0]?.due;
+        const focusDueAt = this.ctx.storage.sql.exec('SELECT MIN(due) AS due FROM room_focus').toArray()[0]?.due;
+        const due = Math.min(gameDue ?? Infinity, focusDueAt ?? Infinity);
+        if (Number.isFinite(due)) await this.ctx.storage.setAlarm(Math.max(Date.now() + 25, due));
         else await this.ctx.storage.deleteAlarm();
     }
     async alarm() {
@@ -136,7 +168,14 @@ export class KerneRooms extends DurableObject {
             else advance(game, now);
             this.saveGame(row.room, game); this.publishGame(row.room, game);
         }
-        await this.scheduleGames();
+        const focusRows = this.ctx.storage.sql.exec('SELECT room, state FROM room_focus WHERE due <= ?', now).toArray();
+        for (const row of focusRows) {
+            let focus = JSON.parse(row.state);
+            if (focus.phase === 'done' && focus.updatedAt + 24 * 60 * 60_000 <= now || focus.emptyAt && focus.emptyAt + 10 * 60_000 <= now) focus = null;
+            else advanceFocus(focus, now);
+            this.saveFocus(row.room, focus); this.publishFocus(row.room, focus);
+        }
+        await this.scheduleState();
     }
     async gameMessage(ws, state, event, data) {
         const room = state.roomId, now = Date.now();
@@ -163,7 +202,7 @@ export class KerneRooms extends DurableObject {
             else this.publishGame(room, game);
             if (result.reaction) this.broadcast(room, 'game-reaction', result.reaction);
             if (result.invite) this.broadcast(room, 'game-invite', { from: state.name, kind: game.kind });
-            await this.scheduleGames();
+            await this.scheduleState();
         } catch (error) { send(ws, 'game-error', { message: error.message }); }
     }
 
@@ -253,16 +292,24 @@ export class KerneRooms extends DurableObject {
                 .map(p => ({ peerId: p.socketId, streamId: p.screenStreamId }));
             send(ws, 'room-joined', { roomId, users, yourPeerId: state.socketId, userStates, screenShares });
             send(ws, 'media-state', { ...this.media(roomId), serverNow: Date.now() });
+            let focus = this.focus(roomId);
+            if (focus) {
+                delete focus.emptyAt;
+                advanceFocus(focus);
+                this.saveFocus(roomId, focus);
+            }
+            this.publishFocus(roomId, focus);
             this.broadcast(roomId, 'user-joined', user, ws);
             let game = this.game(roomId);
             if (game?.emptyAt && !game.players.some(p => p.id === userId)) game = null;
             if (game) { delete game.emptyAt; presence(game, this.members(roomId)); }
             this.saveGame(roomId, game); this.publishGame(roomId, game);
-            await this.scheduleGames();
+            await this.scheduleState();
             return;
         }
 
         if (!state.roomId) return;
+        if (event === 'focus-control') { await this.focusMessage(ws, state, data); return; }
         if (['sound-play','watch-control','radio-control'].includes(event)) { await this.mediaMessage(ws, state, event, data); return; }
         if (['game-get','game-create','game-action'].includes(event)) { await this.gameMessage(ws, state, event, data); return; }
         if (event === 'request-ice-servers') {
@@ -337,13 +384,22 @@ export class KerneRooms extends DurableObject {
                 socketId: state.socketId, peerId: state.socketId, userId: state.userId
             }, ws);
             const game = this.game(state.roomId);
+            const members = this.members(state.roomId, ws);
             if (game) {
-                const members = this.members(state.roomId, ws);
                 presence(game, members);
                 if (!members.length) game.emptyAt = Date.now();
                 this.saveGame(state.roomId, game); this.publishGame(state.roomId, game);
-                await this.scheduleGames();
             }
+            const focus = this.focus(state.roomId);
+            if (focus) {
+                if (!members.length) focus.emptyAt = Date.now();
+                else if (focus.ownerId === state.userId && !members.some(member => member.id === state.userId)) {
+                    focus.ownerId = members[0].id; focus.ownerName = members[0].name;
+                    focus.revision++; focus.transition = 'host'; focus.updatedAt = Date.now();
+                }
+                this.saveFocus(state.roomId, focus); this.publishFocus(state.roomId, focus);
+            }
+            if (game || focus) await this.scheduleState();
         }
         try { ws.close(code, reason); } catch (_) {}
     }

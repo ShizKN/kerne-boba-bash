@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, act, advance, presence, view, nextDeadline } from './games.js';
+import { startFocus, advanceFocus, controlFocus, focusDue } from './focus.js';
 
 const alice = { id: 'alice', name: 'Alice' }, bob = { id: 'bob', name: 'Bob' }, cara = { id: 'cara', name: 'Cara' };
 const command = (g, p, action, data = {}, now = 1000) => act(g,p,action,{ gameId:g.id,round:g.round,...data },now);
@@ -124,4 +125,55 @@ test('Block Riot gives each player a playable board and scores only validated cl
     assert.throws(()=>command(g,alice,'pop',{index},1250),/wait|fast/i);
     advance(g,g.deadline); assert.equal(g.phase,'finished');
     assert.equal(view(g,bob.id,g.deadline).boards[alice.id].length,36);
+});
+test('room focus timer runs one block or repeats with every fourth long break', () => {
+    const once=startFocus(alice,{workMinutes:25,breakMinutes:5,longBreakMinutes:15,mode:'once'},1000);
+    assert.equal(focusDue(once),1000+25*60_000);
+    assert.equal(advanceFocus(once,once.deadline-1),false);
+    assert.equal(advanceFocus(once,once.deadline),true);
+    assert.equal(once.phase,'done'); assert.equal(once.completedCycles,1);
+    const repeat=startFocus(alice,{workMinutes:1,breakMinutes:1,longBreakMinutes:3,mode:'repeat'},1000);
+    for(let i=1;i<=4;i++){
+        advanceFocus(repeat,repeat.deadline);assert.equal(repeat.phase,i===4?'longBreak':'break');
+        if(i<4){advanceFocus(repeat,repeat.deadline);assert.equal(repeat.phase,'work');}
+    }
+    assert.equal(repeat.completedCycles,4);assert.equal(repeat.cycle,4);
+});
+test('room focus timer validates settings, owner controls, pause, takeover and expiry', () => {
+    assert.throws(()=>startFocus(alice,{workMinutes:0,breakMinutes:5,longBreakMinutes:15,mode:'once'},1000),/1–180/);
+    const f=startFocus(alice,{workMinutes:25,breakMinutes:5,longBreakMinutes:15,mode:'repeat'},1000);
+    assert.throws(()=>controlFocus(f,bob,'pause',{},[alice,bob],2000),/host/);
+    controlFocus(f,alice,'pause',{},[alice,bob],2000);assert.equal(f.remainingMs,25*60_000-1000);assert.equal(focusDue(f),f.expiresAt);
+    assert.equal(advanceFocus(f,1000+25*60_000),false);
+    controlFocus(f,bob,'resume',{},[bob],3000);assert.equal(f.ownerId,bob.id);assert.equal(f.deadline,3000+25*60_000-1000);
+    controlFocus(f,bob,'skip',{},[bob],6000);assert.equal(f.phase,'break');
+    assert.throws(()=>controlFocus(f,bob,'skip',{},[bob],6500),/Wait/);
+    assert.equal(advanceFocus(f,f.expiresAt),true);assert.equal(f.phase,'done');
+});
+test('solo bots stay server-owned and play all three games', () => {
+    for(const kind of ['sketch','bluff','blocks']) {
+        const g=createGame(kind,alice,{pace:'quick'},1000);
+        command(g,alice,'solo');assert.equal(g.players.filter(p=>p.bot).length,2);
+        assert.equal(view(g,alice.id).solo,true);
+        assert.throws(()=>command(g,bob,'solo'),/Join|player|Spectator/i);
+        command(g,alice,'start');
+        if(kind==='sketch') {
+            assert.equal(g.artistId,alice.id);choose(g,1100);
+            for(let i=0;i<2;i++)command(g,alice,'draw',{stroke:{id:`solo-${i}`,color:'#1a1a1a',width:5,points:[{x:.1+i*.1,y:.2},{x:.3+i*.1,y:.4}]}},1200+i);
+            advance(g,g.botNextAt);assert.ok(g.feed.some(item=>item.text.includes('Mochi')));
+            while(g.phase==='draw'&&g.botNextAt&&g.botNextAt<g.deadline)advance(g,g.botNextAt);
+            assert.ok(g.players.some(p=>p.bot&&p.score>0));
+        } else if(kind==='bluff') {
+            assert.equal(Object.keys(g.secret.submissions).length,2);
+            command(g,alice,'submit',{text:'A spectacular pineapple'},1100);
+            assert.equal(g.phase,'vote');assert.equal(Object.keys(g.secret.votes).length,2);
+            const choice=g.secret.options.find(o=>o.isAnswer);command(g,alice,'vote',{optionId:choice.id},1200);
+            assert.equal(g.phase,'reveal');
+        } else {
+            assert.equal(g.phase,'blocks');advance(g,g.botNextAt);
+            assert.ok(g.players.filter(p=>p.bot).every(p=>p.score>0));
+        }
+        presence(g,[],3000);assert.equal(g.hostId,alice.id);
+        assert.ok(g.players.filter(p=>p.bot).every(p=>p.online));
+    }
 });

@@ -53,6 +53,14 @@ const badge = (player,text) => { if(!player.badges.includes(text)) player.badges
 function feed(game,text,kind='note') { game.feed.push({id:crypto.randomUUID(),text,kind}); game.feed=game.feed.slice(-18); }
 function award(player,amount) { player.score+=amount; player.roundScore+=amount; }
 function player(info,host=false) { return {id:info.id,name:String(info.name).slice(0,20),score:0,roundScore:0,ready:host,online:true,active:true,badges:[],correct:0,fooled:0}; }
+function addBots(game) {
+    require(game.phase==='lobby' && game.players.filter(p=>p.active).length===1,'Solo mode needs an empty lobby.');
+    game.solo=true;
+    for(const name of ['Mochi','Pixel']) {
+        const bot=player({id:`bot-${game.id}-${name}`,name},false);
+        bot.bot=true;bot.ready=true;game.players.push(bot);
+    }
+}
 const blockColor = () => Math.floor(random()*5);
 function blockBoard() {
     const board=Array.from({length:36},blockColor);
@@ -77,6 +85,7 @@ function popBlocks(game,p,index,now) {
         const kept=[];for(let row=5;row>=0;row--)if(board[row*6+col]!==null)kept.push(board[row*6+col]);
         for(let row=5;row>=0;row--)board[row*6+col]=kept[5-row]??blockColor();
     }
+    if(!board.some((color,i)=>i%6<5&&board[i+1]===color || i<30&&board[i+6]===color)) board[1]=board[0];
     p.lastBlockAt=now;p.combo=combo;award(p,points);
     if(combo>=4)badge(p,'Combo king');
     if(group.length>=10)badge(p,'Meteor magnet');
@@ -98,6 +107,7 @@ function roundStart(game,now) {
         const sameBoard=blockBoard();
         for(const p of online(game)){p.board=[...sameBoard];p.combo=0;p.lastBlockAt=0;}
         game.blockLast=null;game.phase='blocks';game.deadline=now+(game.pace==='quick'?75_000:120_000);
+        game.botNextAt=game.solo?now+1800:null;
         feed(game,'Pop matching clusters. Bigger chains score more. Last 15 seconds are double points.');
     } else if(game.kind==='sketch') {
         const order=game.turnOrder.filter(id=>online(game).some(p=>p.id===id));
@@ -111,6 +121,7 @@ function roundStart(game,now) {
         const index=shuffled(available.length?available:BLUFFS.map((_,i)=>i))[0]; game.used.push(index);
         game.secret.card=BLUFFS[index]; game.secret.answer=BLUFFS[index][1]; game.prompt=BLUFFS[index][0];
         game.phase='write'; game.deadline=now+(game.pace==='quick'?35_000:50_000);
+        if(game.solo) game.players.filter(p=>p.bot).forEach((p,i)=>game.secret.submissions[p.id]=game.secret.card[2+i]);
         feed(game,'Write a believable lie. Straight faces encouraged.');
     }
     game.startedAt=now;
@@ -119,6 +130,7 @@ function beginDrawing(game,index,now) {
     game.secret.answer=game.secret.choices[index]; game.used.push(game.secret.answer);
     game.secret.hintOrder=shuffled([...game.secret.answer].map((c,i)=>c===' '?null:i).filter(i=>i!==null));
     game.phase='draw'; game.startedAt=now; game.deadline=now+(game.pace==='quick'?45_000:60_000);
+    game.botNextAt=game.solo?now+12_000:null;
     feed(game,'Pens ready. Guess the drawing!');
 }
 function beginVoting(game,now) {
@@ -127,6 +139,11 @@ function beginVoting(game,now) {
     for(const p of game.players.filter(p=>p.active)) if(submissions[p.id]) options.push({id:crypto.randomUUID(),text:submissions[p.id],isAnswer:false,authorId:p.id});
     for(const text of game.secret.card.slice(2)) if(options.length<3 && !options.some(o=>normal(o.text)===normal(text))) options.push({id:crypto.randomUUID(),text,isAnswer:false,authorId:null});
     game.secret.options=shuffled(options); game.phase='vote'; game.deadline=now+25_000;
+    if(game.solo) for(const p of game.players.filter(p=>p.bot)) {
+        const humanBluff=game.secret.options.find(o=>o.authorId&&!game.players.find(v=>v.id===o.authorId)?.bot);
+        const truth=game.secret.options.find(o=>o.isAnswer);
+        game.secret.votes[p.id]=(humanBluff&&random()<.45?humanBluff:truth).id;
+    }
     feed(game,'One answer is on the secret card. The rest are bluffs.');
 }
 function reveal(game,note,now) {
@@ -142,13 +159,37 @@ function finishVoting(game,now) {
     reveal(game,'Masks off. Here is who fooled whom.',now);
 }
 function finish(game,note,now) { game.phase='finished'; game.deadline=null; game.note=note; game.cleanupAt=now+30*60_000; }
+function botTurn(game,now) {
+    if(game.phase==='blocks') {
+        for(const bot of game.players.filter(p=>p.bot&&p.online)) {
+            const choices=shuffled(bot.board.map((_,i)=>i).filter(i=>blockGroup(bot.board,i).length>=2));
+            if(choices.length) popBlocks(game,bot,choices[0],now);
+        }
+        game.botNextAt=now+1800+Math.floor(random()*1500);
+    } else if(game.phase==='draw') {
+        const bots=game.players.filter(p=>p.bot&&p.online&&!game.secret.guessed[p.id]);
+        const bot=bots[0];
+        if(bot) {
+            if(game.strokes.length<2) feed(game,`${bot.name}: Give us a little more to work with!`,'guess');
+            else if(now-game.startedAt>=24_000 || random()<.25) {
+                const first=Object.keys(game.secret.guessed).length===0;
+                award(bot,100+Math.max(0,Math.round(200*(game.deadline-now)/(game.pace==='quick'?45_000:60_000)))+(first?50:0));
+                const artist=game.players.find(p=>p.id===game.artistId);award(artist,75);
+                bot.correct++;game.secret.guessed[bot.id]=now;feed(game,`${bot.name} got it!`,'correct');
+                if(online(game).filter(p=>p.id!==game.artistId).every(p=>game.secret.guessed[p.id])) reveal(game,'Everyone got it. A masterpiece!',now);
+            } else feed(game,`${bot.name}: Is it a very confused potato?`,'guess');
+        }
+        game.botNextAt=game.phase==='draw'&&game.players.some(p=>p.bot&&!game.secret.guessed[p.id])?now+9000:null;
+    }
+}
 
 export function nextDeadline(game) {
     const hint=game.phase==='draw' && game.secret.hints<2 ? game.startedAt+(game.secret.hints+1)*15_000 : Infinity;
-    return Math.min(game.deadline??Infinity,hint,game.cleanupAt);
+    return Math.min(game.deadline??Infinity,hint,['draw','blocks'].includes(game.phase)?game.botNextAt??Infinity:Infinity,game.cleanupAt);
 }
 export function advance(game,now=Date.now()) {
     if(!game.deadline || now<nextDeadline(game)) return false;
+    if(game.botNextAt&&now>=game.botNextAt&&now<game.deadline&&['draw','blocks'].includes(game.phase)) {botTurn(game,now);return true;}
     if(game.phase==='choose') beginDrawing(game,0,now);
     else if(game.phase==='draw') {
         if(now>=game.deadline) reveal(game,'Time! The secret word was…',now);
@@ -162,15 +203,16 @@ export function advance(game,now=Date.now()) {
 }
 export function presence(game,members,now=Date.now()) {
     const before=JSON.stringify(game);
-    for(const p of game.players) p.online=p.active && members.some(m=>m.id===p.id);
+    for(const p of game.players) p.online=p.active && (p.bot||members.some(m=>m.id===p.id));
     if(!game.players.some(p=>p.id===game.hostId&&p.online)) {
-        const host=online(game)[0]; if(host && host.id!==game.hostId) {game.hostId=host.id; feed(game,`${host.name} is now the host.`);}
+        const host=online(game).find(p=>!p.bot); if(host && host.id!==game.hostId) {game.hostId=host.id; feed(game,`${host.name} is now the host.`);}
     }
     const artistMissing=game.kind==='sketch'&&['choose','draw'].includes(game.phase)&&!online(game).some(p=>p.id===game.artistId);
-    if((online(game).length<2||artistMissing)&&PHASES.has(game.phase)) {
+    const enough=game.solo?online(game).some(p=>!p.bot):online(game).length>=2;
+    if((!enough||artistMissing)&&PHASES.has(game.phase)) {
         game.paused={phase:game.phase,remaining:Math.max(1,game.deadline-now),elapsed:now-game.startedAt};
         game.phase='paused'; game.deadline=now+30_000; game.note='Waiting for a player to reconnect…';
-    } else if(game.phase==='paused'&&online(game).length>=2 && (game.kind!=='sketch'||!['choose','draw'].includes(game.paused.phase)||online(game).some(p=>p.id===game.artistId))) {
+    } else if(game.phase==='paused'&&enough && (game.kind!=='sketch'||!['choose','draw'].includes(game.paused.phase)||online(game).some(p=>p.id===game.artistId))) {
         game.phase=game.paused.phase; game.deadline=now+game.paused.remaining; game.startedAt=now-game.paused.elapsed; game.paused=null; game.note='';
     }
     return before!==JSON.stringify(game);
@@ -187,16 +229,17 @@ export function act(game,info,action,data={},now=Date.now()) {
     }
     require(p,'Join the game first. Spectators cannot play.');
     const host=()=>require(info.id===game.hostId,'Only the host can do that.');
-    if(action==='ready') { require(game.phase==='lobby','The match has already started.'); require(typeof data.ready==='boolean','Choose a ready state.'); p.ready=data.ready; }
+    if(action==='solo') {host();addBots(game);}
+    else if(action==='ready') { require(game.phase==='lobby','The match has already started.'); require(typeof data.ready==='boolean','Choose a ready state.'); p.ready=data.ready; }
     else if(action==='settings') { host(); require(game.phase==='lobby','Settings are locked during a match.'); require(['quick','classic'].includes(data.pace),'Choose a supported pace.'); game.pace=data.pace; }
     else if(action==='start') {
         host(); require(game.phase==='lobby','The match has already started.');
         require(online(game).length>=2,'Invite at least two players to start.'); require(online(game).every(p=>p.ready),'Wait until everyone is ready.');
-        game.turnOrder=online(game).map(p=>p.id); game.totalRounds=game.kind==='sketch'?game.turnOrder.length*(game.pace==='quick'?1:2):game.kind==='blocks'?1:(game.pace==='quick'?3:5);
+        game.turnOrder=online(game).filter(p=>!p.bot).map(p=>p.id); game.totalRounds=game.kind==='sketch'?(game.solo?(game.pace==='quick'?3:5):game.turnOrder.length*(game.pace==='quick'?1:2)):game.kind==='blocks'?1:(game.pace==='quick'?3:5);
         roundStart(game,now);
     } else if(action==='cancel') { host(); return {close:true}; }
     else if(action==='invite') { require(!game.lastInvite||now-game.lastInvite>=10_000,'The invitation is already on its way.'); game.lastInvite=now; return {invite:true}; }
-    else if(action==='rematch') { host(); require(game.phase==='finished','Finish this match first.'); const next=createGame(game.kind,info,{pace:game.pace},now); next.players=online(game).map(v=>player(v,v.id===info.id)); Object.assign(game,next); }
+    else if(action==='rematch') { host(); require(game.phase==='finished','Finish this match first.'); const next=createGame(game.kind,info,{pace:game.pace},now); next.players=online(game).filter(v=>!v.bot).map(v=>player(v,v.id===info.id)); Object.assign(game,next); }
     else if(action==='leave') {
         p.active=false; p.online=false;
         if(game.phase==='lobby') game.players=game.players.filter(v=>v.active);
@@ -256,7 +299,7 @@ export function view(game,playerId,now=Date.now()) {
     const visibleOptions=['vote','reveal','finished'].includes(game.phase)?game.secret.options||[]:[];
     return {
         id:game.id,kind:game.kind,phase:game.phase,hostId:game.hostId,pace:game.pace,round:game.round,totalRounds:game.totalRounds,deadline:game.deadline,serverNow:now,
-        players:game.players.map(({id,name,score,roundScore,ready,online,active,badges})=>({id,name,score,roundScore,ready,online,active,badges})),
+        players:game.players.map(({id,name,score,roundScore,ready,online,active,badges,bot})=>({id,name,score,roundScore,ready,online,active,badges,bot:!!bot})),solo:!!game.solo,
         artistId:game.artistId,word:game.kind==='sketch'?{mask,...((artist||revealing)&&answer?{answer}:{}),...(artist&&game.phase==='choose'?{choices:game.secret.choices}:{})}:{},
         prompt:game.kind==='bluff'?game.prompt:undefined,
         options:visibleOptions.map(o=>({id:o.id,text:o.text,...(revealing?{isAnswer:o.isAnswer,authors:o.authorId?[game.players.find(p=>p.id===o.authorId)?.name||'Player']:[],voters:Object.entries(game.secret.votes||{}).filter(([,id])=>id===o.id).map(([id])=>game.players.find(p=>p.id===id)?.name||'Player')}:{})})),
