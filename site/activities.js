@@ -21,7 +21,7 @@
     };
     class Activities {
         constructor(manager) {
-            this.manager=manager; this.socket=manager.socket; this.game=null; this.signature=''; this.pending=new Map(); this.color='#1a1a1a'; this.width=5; this.sound=false; this.offset=0; this.mode='games'; this.browsing=true; this.filter='all'; this.search=''; this.tool='watch'; this.media={video:{id:'',playing:false,position:0,at:0},radio:{station:'off',at:0}};
+            this.manager=manager; this.socket=manager.socket; this.joined=false; this.game=null; this.signature=''; this.pending=new Map(); this.color='#1a1a1a'; this.width=5; this.sound=false; this.offset=0; this.mode='games'; this.browsing=true; this.filter='all'; this.search=''; this.tool='watch'; this.media={video:{id:'',playing:false,position:0,at:0},radio:{station:'off',at:0}};
             this.button=document.createElement('button'); this.button.className='control-btn'; this.button.id='activitiesBtn'; this.button.title='Activities'; this.button.setAttribute('aria-label','Activities'); this.button.innerHTML=PAD;
             document.querySelector('.controls').insertBefore(this.button,$('roomMore'));
             this.dialog=document.createElement('dialog'); this.dialog.id='activitiesDialog'; this.dialog.setAttribute('aria-labelledby','activityTitle');
@@ -44,10 +44,19 @@
             this.socket.on('game-invite',({from,kind})=>{if(!this.dialog.open){this.button.classList.add('has-notif');UI.showToast(`${from} invited you to ${NAMES[kind]||'play'}. Open Activities.`);}});
             this.socket.on('media-state',data=>{this.media={video:data.video,radio:data.radio};this.mediaOffset=(data.serverNow||Date.now())-Date.now();if(this.dialog.open&&this.mode==='together')this.updateTogether();if(this.sound)this.startRadio();});
             this.socket.on('sound-play',({id,from})=>{if(this.sound)this.playSfx(id);if(this.dialog.open&&this.mode==='together')this.notice(`${from} played ${id}`);});
-            this.socket.on('disconnect',()=>{$('activityConnection').hidden=false;this.pointer=null;this.pending.clear();this.stopRadio();this.launching=false;this.signature='';this.render();});
-            this.socket.on('room-joined',()=>{this.socket.emit('game-get',{});this.socket.emit('focus-control',{action:'get'});$('activityConnection').hidden=true;});
+            this.socket.on('connect',()=>{this.joined=false;this.updateConnection();});
+            this.socket.on('disconnect',()=>{this.joined=false;$('activityConnection').hidden=false;this.pointer=null;this.pending.clear();this.stopRadio();this.launching=false;this.signature='';this.render();});
+            this.socket.on('room-joined',()=>{this.joined=true;this.socket.emit('game-get',{});this.socket.emit('focus-control',{action:'get'});this.updateConnection();});
             this.focusDock=document.createElement('button');this.focusDock.id='focusDock';this.focusDock.hidden=true;this.focusDock.setAttribute('aria-label','Open room focus timer');this.focusDock.onclick=()=>{this.mode='focus';this.open();};$('videoGrid').append(this.focusDock);
             this.timer=setInterval(()=>{this.tickFocus();if(this.dialog.open){this.tick();this.updateMic();}},250);
+        }
+        get ready(){return this.joined&&this.socket.connected;}
+        updateConnection(){
+            const notice=$('activityConnection');notice.hidden=this.ready;notice.textContent=this.socket.connected?'Joining the call… Activities will be ready in a moment.':'Connecting to the call… Your progress is saved.';
+            this.dialog.querySelectorAll('[data-create],[data-act],[data-word],[data-option],[data-block],[data-focus],[data-sfx],[data-station],[data-watch],[data-seek],.a-form button,.a-watch-form button,.a-bluff-form button,#focusForm>.a-primary').forEach(button=>{
+                if(!this.ready&&!button.disabled){button.disabled=true;button.dataset.awaitRoom='yes';}
+                else if(this.ready&&button.dataset.awaitRoom){button.disabled=false;delete button.dataset.awaitRoom;}
+            });
         }
         get me(){return this.game?.players.find(p=>p.id===this.manager.userId&&p.active);}
         get host(){return this.game?.hostId===this.manager.userId;}
@@ -62,7 +71,7 @@
             if(enabled){this.audioContext().resume();this.tone();this.startRadio();}else this.stopRadio();
         }
         send(action,data={}){
-            if(!this.socket.connected){this.notice('The call is reconnecting. Try again in a moment.',true);return;}
+            if(!this.ready){this.notice('Wait until you have joined the call.',true);return;}
             this.socket.emit('game-action',{action,gameId:this.game?.id,round:this.game?.round,...data});
         }
         notice(message,error=false){const n=$('activityNotice');n.textContent=message;n.className=`a-notice show${error?' is-error':''}`;clearTimeout(this.noticeTimer);this.noticeTimer=setTimeout(()=>n.classList.remove('show'),4200);}
@@ -87,8 +96,8 @@
             $('activityBrowse').hidden=catalog&&!this.selectedKind;
             $('activitySection').textContent=catalog?'Activities':this.mode==='games'?NAMES[g?.kind]||'Activities':this.mode==='focus'?'Focus timer':'Watch & listen';
             $('activityCameras').hidden=catalog;
-            if(this.mode==='together'){this.renderTogether();this.refreshCameras();this.updateMic();return;}
-            if(this.mode==='focus'){this.renderFocus();this.refreshCameras();this.updateMic();return;}
+            if(this.mode==='together'){this.renderTogether();this.refreshCameras();this.updateMic();this.updateConnection();return;}
+            if(this.mode==='focus'){this.renderFocus();this.refreshCameras();this.updateMic();this.updateConnection();return;}
             const artist=g?.artistId===this.manager.userId;
             const titles={lobby:'Who’s playing?',choose:artist?'Choose a word to draw':'Waiting for the artist',draw:artist?'Draw the word':'Guess the drawing',write:'Write a fake answer',vote:'Find the original answer',blocks:'Tap matching blocks',reveal:'The answer is…',finished:'Final scores',paused:'Waiting for a player'};
             $('activityTitle').textContent=catalog?(this.selectedKind?NAMES[this.selectedKind]:'Choose an activity'):titles[g.phase]||NAMES[g.kind];
@@ -115,7 +124,7 @@
             }
             if(catalog){this.filterCatalog();this.updateActiveGame();$('activityScores').hidden=true;$('activityReactions').replaceChildren();}
             else {this.updatePhase();this.renderScores();this.renderReactions();}
-            this.refreshCameras();this.tick();this.updateMic();
+            this.refreshCameras();this.tick();this.updateMic();this.updateConnection();
         }
         home(){
             if(this.selectedKind){const kind=this.selectedKind,info=GAMES[kind];return `<section class="a-detail"><div class="a-preview ${kind}">${ART[kind]}</div><div class="a-detail-body"><span class="a-meta">${info.duration} · 2–4 friends or solo</span><h2>${NAMES[kind]}</h2><p>${info.description}</p><ol class="a-steps">${info.steps.map(step=>`<li>${step}</li>`).join('')}</ol><div class="a-launch-actions">${this.game?'<p>A game is already open in this call.</p><button class="a-primary" data-return-game>Go to current game</button>':`<button class="a-primary" data-create="${kind}">Play with friends</button><button class="a-secondary" data-create="${kind}" data-solo="true">Practice solo <small>with 2 bots</small></button>`}</div></div></section>`;}
@@ -212,6 +221,7 @@
         updateMic(){const b=$('activityMic');b.textContent=this.manager.isMicOn?'Mic on':'Mic off';b.setAttribute('aria-label',this.manager.isMicOn?'Mute microphone':'Unmute microphone');b.classList.toggle('muted',!this.manager.isMicOn);}
         click(event){
             const b=event.target.closest('button');if(!b||b.disabled)return;
+            if(b.matches('[data-sfx],[data-station],[data-watch],[data-seek]')&&!this.ready)return this.notice('Wait until you have joined the call.',true);
             if(b.dataset.filter){this.filter=b.dataset.filter;this.filterCatalog();return;}
             if(b.dataset.details){this.selectedKind=b.dataset.details;this.browsing=true;this.signature='';this.render();return;}
             if(b.hasAttribute('data-return-game')){this.selectedKind=null;this.browsing=false;this.mode='games';if(this.game?.phase==='lobby'&&!this.game.isPlayer)this.send('join');this.signature='';this.render();return;}
@@ -224,7 +234,7 @@
             if(b.dataset.station){this.socket.emit('radio-control',{station:b.dataset.station});this.setSound(true);return;}
             if(b.dataset.watch){if(!this.player)return;const position=this.player.getCurrentTime()||0,playing=b.dataset.watch==='play';this.socket.emit('watch-control',{playing,position});return;}
             if(b.dataset.seek){if(!this.player)return;const position=Math.max(0,(this.player.getCurrentTime()||0)+Number(b.dataset.seek));this.socket.emit('watch-control',{playing:this.player.getPlayerState()===1,position});return;}
-            if(b.dataset.create){if(!this.socket.connected)return this.notice('Wait for the call to reconnect.',true);if(this.launching)return;this.launching=true;b.disabled=true;b.textContent='Starting…';this.browsing=false;this.socket.emit('game-create',{kind:b.dataset.create,pace:'quick',solo:b.dataset.solo==='true'});this.launchTimer=setTimeout(()=>{if(this.launching){this.launching=false;this.browsing=true;this.signature='';this.render();this.notice('The game did not start. Try again.',true);}},8000);}
+            if(b.dataset.create){if(!this.ready)return this.notice('Wait until you have joined the call.',true);if(this.launching)return;this.launching=true;b.disabled=true;b.textContent='Starting…';this.browsing=false;this.socket.emit('game-create',{kind:b.dataset.create,pace:'quick',solo:b.dataset.solo==='true'});this.launchTimer=setTimeout(()=>{if(this.launching){this.launching=false;this.browsing=true;this.signature='';this.render();this.notice('The game did not start. Try again.',true);}},8000);}
             else if(b.dataset.act)this.send(b.dataset.act);
             else if(b.dataset.pace)this.send('settings',{pace:b.dataset.pace});
             else if(b.dataset.word!==undefined)this.send('choose',{index:Number(b.dataset.word)});
@@ -236,7 +246,7 @@
             else if(b.hasAttribute('data-confirm-close')){if(b.dataset.confirmed==='yes'){b.dataset.confirmed='';this.send('cancel');}else{b.dataset.confirmed='yes';b.textContent=b.id==='activityEndMobile'?'End for all?':'End for everyone? Click again';setTimeout(()=>{if(b.isConnected){b.dataset.confirmed='';b.textContent=b.id==='activityEndMobile'?'End game':'End this game';}},4000);}}
         }
         submit(event){
-            const form=event.target;if(!form.dataset.form)return;event.preventDefault();
+            const form=event.target;if(!form.dataset.form)return;event.preventDefault();if(!this.ready)return this.notice('Wait until you have joined the call.',true);
             if(form.dataset.form==='focus'){this.focusAction('start');return;}
             if(form.dataset.form==='watch'){const raw=form.querySelector('input').value.trim();let id=raw;if(!/^[\w-]{11}$/.test(id)){try{const url=new URL(raw);if(!['youtube.com','www.youtube.com','m.youtube.com','youtu.be','www.youtube-nocookie.com'].includes(url.hostname))throw Error();id=url.hostname==='youtu.be'?url.pathname.slice(1):url.searchParams.get('v')||url.pathname.split('/').filter(Boolean).at(-1);}catch(_){id='';}}if(!/^[\w-]{11}$/.test(id))return this.notice('Paste a YouTube link or video ID.',true);this.socket.emit('watch-control',{id});return;}
             const input=form.querySelector('input,textarea'),text=input.value.trim();if(!text)return;
@@ -252,7 +262,7 @@
             this.tickFocus();if(this.dialog.open&&this.mode==='focus')this.renderFocus();
         }
         focusAction(action){
-            if(!this.socket.connected)return this.notice('The call is reconnecting. Try again in a moment.',true);
+            if(!this.ready)return this.notice('Wait until you have joined the call.',true);
             let data={action};
             if(action==='start'){
                 const form=$('focusForm');if(!form)return;if(!form.checkValidity())form.querySelector('details').open=true;if(!form.reportValidity())return;

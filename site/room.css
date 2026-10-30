@@ -1675,6 +1675,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 
 .a-block-board {
+    overflow:hidden;
     position:relative; display:grid; grid-template-columns:repeat(6,minmax(0,1fr));
     gap:7px; padding:13px; border-radius:14px;
     background:#191d29; box-shadow:inset 0 2px 12px #0c111b70,0 5px 0 #11131b; touch-action:manipulation;
